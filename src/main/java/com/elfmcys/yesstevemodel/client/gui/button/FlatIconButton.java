@@ -27,7 +27,7 @@ public class FlatIconButton extends FlatColorButton {
     }
 
     public void renderToolTip(GuiGraphics graphics, Screen screen, int pMouseX, int pMouseY) {
-        if (this.isHoveredOrFocused() && tooltips != null) {
+        if (this.isHovered() && tooltips != null) {
             graphics.renderTooltip(screen.getMinecraft().font, tooltips, pMouseX, pMouseY);
         }
     }
