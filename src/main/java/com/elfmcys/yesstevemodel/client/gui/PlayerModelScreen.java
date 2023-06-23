@@ -13,8 +13,8 @@ import com.google.common.collect.Maps;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.ChatFormatting;
+import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -27,6 +27,7 @@ import net.minecraft.network.chat.FormattedText;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.FormattedCharSequence;
+import net.minecraftforge.fml.ModList;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.List;
@@ -101,7 +102,7 @@ public class PlayerModelScreen extends Screen {
             perText = textField.getValue();
             focus = textField.isFocused();
         }
-        textField = new EditBox(getMinecraft().font, x + 144, y + 6, 160, 16, Component.literal("YSM Search Box"));
+        textField = new EditBox(getMinecraft().font, x + 144, y + 6, 140, 16, Component.literal("YSM Search Box"));
         textField.setValue(perText);
         textField.setTextColor(0xF3EFE0);
         textField.setFocused(focus);
@@ -122,21 +123,21 @@ public class PlayerModelScreen extends Screen {
         }).setTooltips("gui.yes_steve_model.model.texture"));
         addRenderableWidget(new StarButton(x + 110, y + 5));
 
-        addRenderableWidget(new FlatIconButton(x + 348, y + 5, 18, 18, 32, 0, (b) -> {
+        addRenderableWidget(new FlatIconButton(x + 328, y + 5, 18, 18, 32, 0, (b) -> {
             if (this.category != Category.ALL) {
                 this.category = Category.ALL;
                 this.page = 0;
                 this.init();
             }
         }).setTooltips("gui.yes_steve_model.all_models"));
-        addRenderableWidget(new FlatIconButton(x + 328, y + 5, 18, 18, 48, 0, (b) -> {
+        addRenderableWidget(new FlatIconButton(x + 308, y + 5, 18, 18, 48, 0, (b) -> {
             if (this.category != Category.AUTH) {
                 this.category = Category.AUTH;
                 this.page = 0;
                 this.init();
             }
         }).setTooltips("gui.yes_steve_model.auth_models"));
-        addRenderableWidget(new FlatIconButton(x + 308, y + 5, 18, 18, 0, 0, (b) -> {
+        addRenderableWidget(new FlatIconButton(x + 288, y + 5, 18, 18, 0, 0, (b) -> {
             if (this.category != Category.STAR) {
                 this.category = Category.STAR;
                 this.page = 0;
@@ -150,6 +151,9 @@ public class PlayerModelScreen extends Screen {
         addRenderableWidget(new FlatIconButton(x + 377, y + 5, 18, 18, 0, 16, (b) -> {
             this.getMinecraft().setScreen(new DownloadScreen(this));
         }).setTooltips("gui.yes_steve_model.download"));
+        addRenderableWidget(new FlatIconButton(x + 357, y + 5, 18, 18, 80, 0, (b) -> {
+            this.getMinecraft().setScreen(new OpenModelFolderScreen(this));
+        }).setTooltips("gui.yes_steve_model.open_model_folder.open"));
 
         addRenderableWidget(new FlatColorButton(x + 198, y + 215, 52, 14, Component.translatable("gui.yes_steve_model.pre_page"), (b) -> {
             if (this.page > 0) {
@@ -196,7 +200,7 @@ public class PlayerModelScreen extends Screen {
 
         graphics.fillGradient(x, y, x + 135, y + 235, 0xff_222222, 0xff_222222);
         graphics.fillGradient(x + 138, y, x + 420, y + 235, 0xff_222222, 0xff_222222);
-        graphics.fillGradient(x + 371, y + 7, x + 372, y + 21, 0xFF_F3EFE0, 0xFF_F3EFE0);
+        graphics.fillGradient(x + 351, y + 7, x + 352, y + 21, 0xFF_F3EFE0, 0xFF_F3EFE0);
 
         textField.render(graphics, mouseX, mouseY, partialTicks);
         LocalPlayer player = Minecraft.getInstance().player;
@@ -217,7 +221,7 @@ public class PlayerModelScreen extends Screen {
                 int lineY = y + 205;
                 for (FormattedCharSequence line : modelNameSplit) {
                     int nameWidth = font.width(line);
-                    graphics.drawString(font, line, x + (135 - nameWidth) / 2.0F, lineY, 0xF3EFE0, false);
+                    graphics.drawString(font, line, x + (135 - nameWidth) / 2, lineY, 0xF3EFE0);
                     lineY += 10;
                 }
             });
@@ -228,7 +232,10 @@ public class PlayerModelScreen extends Screen {
         }
 
         String pageInfo = String.format("%d/%d", page + 1, this.maxPage + 1);
-        graphics.drawString(font, pageInfo, x + 138 + (282 - font.width(pageInfo)) / 2.0F, y + 223 - font.lineHeight / 2, 0xF3EFE0, false);
+        graphics.drawString(font, pageInfo, x + 138 + (282 - font.width(pageInfo)) / 2, y + 223 - font.lineHeight / 2, 0xF3EFE0);
+
+        String debugInfo = String.format("%s-%s", SharedConstants.getCurrentVersion().getName(), ModList.get().getModFileById(YesSteveModel.MOD_ID).versionString());
+        graphics.drawString(font, debugInfo, x + 2, y + 226, ChatFormatting.DARK_GRAY.getColor());
 
         super.render(graphics, mouseX, mouseY, partialTicks);
         this.renderables.stream().filter(r -> r instanceof FlatIconButton)

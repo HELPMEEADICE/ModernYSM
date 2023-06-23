@@ -11,8 +11,6 @@ import net.minecraft.network.chat.Component;
 
 public class ConfigScreen extends Screen {
     private final PlayerModelScreen parent;
-    private int x;
-    private int y;
 
     public ConfigScreen(PlayerModelScreen parent) {
         super(Component.literal("YSM Config GUI"));
@@ -22,8 +20,8 @@ public class ConfigScreen extends Screen {
     @Override
     @Keep
     protected void init() {
-        this.x = (width - 420) / 2;
-        this.y = (height - 235) / 2;
+        int x = (width - 420) / 2;
+        int y = (height - 235) / 2;
 
         addRenderableWidget(new FlatColorButton(x + 5, y, 80, 18, Component.translatable("gui.yes_steve_model.model.return"), (b) -> this.getMinecraft().setScreen(parent)));
 

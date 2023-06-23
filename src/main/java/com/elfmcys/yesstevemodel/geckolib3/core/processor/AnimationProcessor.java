@@ -11,12 +11,15 @@ import com.elfmcys.yesstevemodel.geckolib3.core.molang.MolangParser;
 import com.elfmcys.yesstevemodel.geckolib3.core.snapshot.BoneSnapshot;
 import com.elfmcys.yesstevemodel.geckolib3.core.snapshot.DirtyTracker;
 import com.elfmcys.yesstevemodel.geckolib3.core.util.MathUtil;
+import com.elfmcys.yesstevemodel.util.ControllerUtils;
+import com.google.common.collect.Maps;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.ints.IntSet;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -50,6 +53,7 @@ public class AnimationProcessor<T extends IAnimatable> {
         // 存储每个骨骼的 rotation/position/scale
         updateBoneSnapshots(manager.getBoneSnapshotCollection());
         Map<String, Pair<IBone, BoneSnapshot>> boneSnapshots = manager.getBoneSnapshotCollection();
+        HashMap<String, PointData> pointDataGroup = Maps.newHashMap();
         for (AnimationController<T> controller : manager.getAnimationControllers().values()) {
             if (reloadAnimations) {
                 controller.markNeedsReload();
@@ -65,6 +69,8 @@ public class AnimationProcessor<T extends IAnimatable> {
                 IBone bone = boneAnimation.bone();
                 BoneSnapshot snapshot = boneSnapshots.get(bone.getName()).getRight();
                 BoneSnapshot initialSnapshot = bone.getInitialSnapshot();
+                pointDataGroup.putIfAbsent(bone.getName(), new PointData());
+                PointData pointData = pointDataGroup.get(bone.getName());
 
                 AnimationPoint rXPoint = boneAnimation.rotationXQueue().poll();
                 AnimationPoint rYPoint = boneAnimation.rotationYQueue().poll();
@@ -86,12 +92,21 @@ public class AnimationProcessor<T extends IAnimatable> {
 
                 // 如果此骨骼有任何旋转值
                 if (rXPoint != null && rYPoint != null && rZPoint != null) {
-                    bone.setRotationX(MathUtil.lerpValues(rXPoint, controller.easingType, controller.customEasingMethod)
-                            + initialSnapshot.rotationValueX);
-                    bone.setRotationY(MathUtil.lerpValues(rYPoint, controller.easingType, controller.customEasingMethod)
-                            + initialSnapshot.rotationValueY);
-                    bone.setRotationZ(MathUtil.lerpValues(rZPoint, controller.easingType, controller.customEasingMethod)
-                            + initialSnapshot.rotationValueZ);
+                    float valueX = MathUtil.lerpValues(rXPoint, controller.easingType, controller.customEasingMethod);
+                    float valueY = MathUtil.lerpValues(rYPoint, controller.easingType, controller.customEasingMethod);
+                    float valueZ = MathUtil.lerpValues(rZPoint, controller.easingType, controller.customEasingMethod);
+                    pointData.rotationValueX += valueX;
+                    pointData.rotationValueY += valueY;
+                    pointData.rotationValueZ += valueZ;
+                    if (controller.getName().equals(ControllerUtils.SWING_CONTROLLER) || controller.getName().equals(ControllerUtils.USE_CONTROLLER)) {
+                        bone.setRotationX(pointData.rotationValueX + initialSnapshot.rotationValueX);
+                        bone.setRotationY(pointData.rotationValueY + initialSnapshot.rotationValueY);
+                        bone.setRotationZ(pointData.rotationValueZ + initialSnapshot.rotationValueZ);
+                    } else {
+                        bone.setRotationX(valueX + initialSnapshot.rotationValueX);
+                        bone.setRotationY(valueY + initialSnapshot.rotationValueY);
+                        bone.setRotationZ(valueZ + initialSnapshot.rotationValueZ);
+                    }
                     snapshot.rotationValueX = bone.getRotationX();
                     snapshot.rotationValueY = bone.getRotationY();
                     snapshot.rotationValueZ = bone.getRotationZ();

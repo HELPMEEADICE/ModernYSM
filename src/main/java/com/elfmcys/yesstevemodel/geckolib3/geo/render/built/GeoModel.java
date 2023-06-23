@@ -8,6 +8,9 @@ import java.util.Optional;
 
 public class GeoModel {
     public List<GeoBone> topLevelBones = new ObjectArrayList<>();
+    public List<GeoBone> leftHandBones = new ObjectArrayList<>();
+    public List<GeoBone> rightHandBones = new ObjectArrayList<>();
+    public List<GeoBone> elytraBones = new ObjectArrayList<>();
     public ModelProperties properties;
 
     public boolean hasTopLevelBone(String name) {

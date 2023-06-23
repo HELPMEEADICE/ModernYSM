@@ -3,6 +3,7 @@ package com.elfmcys.yesstevemodel.client.renderer;
 import com.elfmcys.yesstevemodel.capability.ModelInfoCapabilityProvider;
 import com.elfmcys.yesstevemodel.client.entity.CustomPlayerEntity;
 import com.elfmcys.yesstevemodel.client.model.CustomPlayerModel;
+import com.elfmcys.yesstevemodel.client.renderer.layer.CustomPlayerElytraLayer;
 import com.elfmcys.yesstevemodel.client.renderer.layer.CustomPlayerItemInHandLayer;
 import com.elfmcys.yesstevemodel.event.api.SpecialPlayerRenderEvent;
 import com.elfmcys.yesstevemodel.geckolib3.geo.GeoReplacedEntityRenderer;
@@ -29,10 +30,13 @@ import net.minecraftforge.common.MinecraftForge;
 import org.jetbrains.annotations.Nullable;
 
 public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<CustomPlayerEntity> {
+    private GeoModel geoModel;
+
     @SuppressWarnings("all")
     public CustomPlayerRenderer(EntityRendererProvider.Context ctx) {
         super(ctx, new CustomPlayerModel(), new CustomPlayerEntity());
         addLayer(new CustomPlayerItemInHandLayer<>(this, ctx.getItemInHandRenderer()));
+        addLayer(new CustomPlayerElytraLayer<>(this, ctx.getModelSet()));
     }
 
     @Override
@@ -51,6 +55,7 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<CustomPlayer
         ResourceLocation location = this.modelProvider.getModelLocation(animatable);
         GeoModel geoModel = GeckoLibCache.getInstance().getGeoModels().get(location);
         if (geoModel != null) {
+            this.geoModel = geoModel;
             super.render(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
         }
     }
@@ -132,5 +137,10 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<CustomPlayer
 
     public CustomPlayerEntity getCustomPlayerEntity() {
         return this.animatable;
+    }
+
+    @Nullable
+    public GeoModel getGeoModel() {
+        return geoModel;
     }
 }

@@ -13,12 +13,15 @@ import com.elfmcys.yesstevemodel.util.AnimatableCacheUtil;
 import com.elfmcys.yesstevemodel.util.ModelIdUtil;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.RenderHandEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
@@ -84,11 +87,23 @@ public class RenderFirstPlayerBackground {
                 int packedLight = event.getPackedLight();
                 if (instance != null) {
                     poseStack.pushPose();
+                    if (Minecraft.getInstance().options.bobView().get()) {
+                        bobView(poseStack, event.getPartialTick(), player);
+                    }
                     poseStack.translate(0, -1.5, 0);
                     geoModel.getTopLevelBone(NAME).ifPresent(bone -> instance.renderRecursively(bone, poseStack, buffer, packedLight, OverlayTexture.NO_OVERLAY, 1, 1, 1, 1));
                     poseStack.popPose();
                 }
             }
         });
+    }
+
+    private static void bobView(PoseStack pMatrixStack, float pPartialTicks, Player player) {
+        float walk = player.walkDist - player.walkDistO;
+        float walk2 = -(player.walkDist + walk * pPartialTicks);
+        float lerp = Mth.lerp(pPartialTicks, player.oBob, player.bob);
+        pMatrixStack.translate(-Mth.sin(walk2 * (float) Math.PI) * lerp * 0.5F, Math.abs(Mth.cos(walk2 * (float) Math.PI) * lerp), 0.0D);
+        pMatrixStack.mulPose(Axis.ZN.rotationDegrees(Mth.sin(walk2 * (float) Math.PI) * lerp * 3.0F));
+        pMatrixStack.mulPose(Axis.XN.rotationDegrees(Math.abs(Mth.cos(walk2 * (float) Math.PI - 0.2F) * lerp) * 5.0F));
     }
 }

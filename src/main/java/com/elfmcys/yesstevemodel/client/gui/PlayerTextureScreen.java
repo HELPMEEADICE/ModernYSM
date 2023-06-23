@@ -9,7 +9,6 @@ import com.elfmcys.yesstevemodel.util.Keep;
 import com.elfmcys.yesstevemodel.util.RenderUtil;
 import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -171,10 +170,10 @@ public class PlayerTextureScreen extends Screen {
         });
 
         String texturePageInfo = String.format("%d/%d", texturePage + 1, this.maxTexturePage + 1);
-        graphics.drawString(font, texturePageInfo, x + 302 + (118 - font.width(texturePageInfo)) / 2.0F, y + 223 - font.lineHeight / 2.0F, 0xF3EFE0, false);
+        graphics.drawString(font, texturePageInfo, x + 302 + (118 - font.width(texturePageInfo)) / 2, y + 223 - font.lineHeight / 2, 0xF3EFE0);
 
         String animationPageInfo = String.format("%d/%d", animationPage + 1, this.maxAnimationPage + 1);
-        graphics.drawString(font, animationPageInfo, x + 5 + (80 - font.width(animationPageInfo)) / 2.0F, y + 218, 0xF3EFE0, false);
+        graphics.drawString(font, animationPageInfo, x + 5 + (80 - font.width(animationPageInfo)) / 2, y + 218, 0xF3EFE0);
 
         super.render(graphics, mouseX, mouseY, partialTick);
         this.renderables.stream().filter(r -> r instanceof FlatIconButton)

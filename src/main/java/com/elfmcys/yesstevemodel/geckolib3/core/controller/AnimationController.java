@@ -66,7 +66,7 @@ public class AnimationController<T extends IAnimatable> {
     protected Queue<Animation> animationQueue = new LinkedList<>();
     protected Animation currentAnimation;
     protected AnimationBuilder currentAnimationBuilder = new AnimationBuilder();
-    protected boolean shouldResetTick = false;
+    public boolean shouldResetTick = false;
     protected boolean justStartedTransition = false;
     protected boolean needsAnimationReload = false;
     /**
@@ -523,7 +523,7 @@ public class AnimationController<T extends IAnimatable> {
     }
 
     // 在新动画开始、过渡开始或者其他情况下重置 tick
-    protected double adjustTick(double tick) {
+    public double adjustTick(double tick) {
         if (this.shouldResetTick) {
             if (getAnimationState() == AnimationState.TRANSITIONING) {
                 this.tickOffset = tick;

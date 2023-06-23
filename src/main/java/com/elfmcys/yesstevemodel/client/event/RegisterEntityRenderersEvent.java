@@ -30,6 +30,7 @@ public class RegisterEntityRenderersEvent {
         EntityModelSet entityModels = Minecraft.getInstance().getEntityModels();
         Font font = Minecraft.getInstance().font;
         EntityRendererProvider.Context context = new EntityRendererProvider.Context(dispatcher, itemRenderer, blockRenderer, itemInHandRenderer, resourceManager, entityModels, font);
+        context.getModelSet().onResourceManagerReload(resourceManager);
         CUSTOM_PLAYER_RENDERER = new CustomPlayerRenderer(context);
     }
 

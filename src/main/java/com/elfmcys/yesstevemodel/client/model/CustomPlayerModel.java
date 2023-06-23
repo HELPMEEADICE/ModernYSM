@@ -7,27 +7,20 @@ import com.elfmcys.yesstevemodel.geckolib3.core.IAnimatable;
 import com.elfmcys.yesstevemodel.geckolib3.core.event.predicate.AnimationEvent;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.MolangParser;
 import com.elfmcys.yesstevemodel.geckolib3.core.processor.IBone;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoBone;
 import com.elfmcys.yesstevemodel.geckolib3.model.AnimatedGeoModel;
 import com.elfmcys.yesstevemodel.geckolib3.model.provider.data.EntityModelData;
 import com.elfmcys.yesstevemodel.geckolib3.resource.GeckoLibCache;
-import com.elfmcys.yesstevemodel.geckolib3.util.RenderUtils;
 import com.elfmcys.yesstevemodel.util.Keep;
 import com.elfmcys.yesstevemodel.util.ModelIdUtil;
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.ArmedModel;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.player.Player;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 @SuppressWarnings("all")
-public class CustomPlayerModel extends AnimatedGeoModel implements ArmedModel {
+public class CustomPlayerModel extends AnimatedGeoModel {
     public static final ResourceLocation DEFAULT_MAIN_MODEL = ModelIdUtil.getMainId(new ResourceLocation(YesSteveModel.MOD_ID, "default"));
     public static final ResourceLocation DEFAULT_MAIN_ANIMATION = ModelIdUtil.getMainId(new ResourceLocation(YesSteveModel.MOD_ID, "default"));
     public static final ResourceLocation DEFAULT_TEXTURE = new ResourceLocation(YesSteveModel.MOD_ID, "default/default.png");
@@ -76,47 +69,11 @@ public class CustomPlayerModel extends AnimatedGeoModel implements ArmedModel {
     }
 
     private void codeAnimation(AnimationEvent animationEvent, EntityModelData data, Player player) {
+        // FIXME: 2023/6/21 这一块设计应该改成 molang 的，而且这个寻找效率低下
         IBone head = getBone("Head");
         if (head != null) {
             head.setRotationX(head.getRotationX() + (float) Math.toRadians(data.headPitch));
             head.setRotationY(head.getRotationY() + (float) Math.toRadians(data.netHeadYaw));
-        }
-    }
-
-    @Override
-    @Keep
-    public void translateToHand(HumanoidArm arm, PoseStack poseStack) {
-        if (arm == HumanoidArm.LEFT) {
-            IBone leftHandLocator = getBone("LeftHandLocator");
-            moveToBone(poseStack, "LeftHand");
-            if (leftHandLocator instanceof GeoBone cube) {
-                RenderUtils.translateAndRotateMatrixForBone(poseStack, cube);
-            }
-        } else {
-            moveToBone(poseStack, "RightHand");
-            IBone rightHandLocator = getBone("RightHandLocator");
-            if (rightHandLocator instanceof GeoBone cube) {
-                RenderUtils.translateAndRotateMatrixForBone(poseStack, cube);
-            }
-        }
-    }
-
-    private void moveToBone(PoseStack poseStack, String name) {
-        IBone bone = getBone(name);
-        if (bone instanceof GeoBone geoBone) {
-            List<GeoBone> boneList = new ArrayList<>();
-            getBoneParent(geoBone, boneList);
-            Collections.reverse(boneList);
-            for (GeoBone subBone : boneList) {
-                RenderUtils.prepMatrixForBone(poseStack, subBone);
-            }
-        }
-    }
-
-    private void getBoneParent(GeoBone bone, List<GeoBone> boneList) {
-        boneList.add(bone);
-        if (bone.parent != null) {
-            getBoneParent(bone.parent, boneList);
         }
     }
 

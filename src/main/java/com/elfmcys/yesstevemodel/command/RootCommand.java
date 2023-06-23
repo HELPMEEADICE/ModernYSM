@@ -1,9 +1,6 @@
 package com.elfmcys.yesstevemodel.command;
 
-import com.elfmcys.yesstevemodel.command.sub.AuthCommand;
-import com.elfmcys.yesstevemodel.command.sub.ExportCommand;
-import com.elfmcys.yesstevemodel.command.sub.ModelCommand;
-import com.elfmcys.yesstevemodel.command.sub.PlayAnimationCommand;
+import com.elfmcys.yesstevemodel.command.sub.*;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
@@ -19,6 +16,7 @@ public class RootCommand {
         root.then(AuthCommand.get());
         root.then(ExportCommand.get());
         root.then(PlayAnimationCommand.get());
+        root.then(ManageCommand.get());
         dispatcher.register(root);
     }
 }

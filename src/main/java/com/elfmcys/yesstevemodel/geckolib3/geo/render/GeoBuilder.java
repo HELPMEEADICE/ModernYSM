@@ -10,15 +10,20 @@ import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoCube;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.elfmcys.yesstevemodel.geckolib3.util.VectorUtils;
 import com.elfmcys.yesstevemodel.util.Keep;
-import org.joml.Vector3f;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import org.apache.commons.lang3.ArrayUtils;
+import org.joml.Vector3f;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 public class GeoBuilder implements IGeoBuilder {
     private static final Map<String, IGeoBuilder> MODDED_GEO_BUILDERS = new Object2ObjectOpenHashMap<>();
     private static final IGeoBuilder DEFAULT_BUILDER = new GeoBuilder();
+    private static final String LEFT_HAND_LOCATOR = "LeftHandLocator";
+    private static final String RIGHT_HAND_LOCATOR = "RightHandLocator";
+    private static final String ELYTRA_LOCATOR_NAME = "ElytraLocator";
 
     public static void registerGeoBuilder(String modid, IGeoBuilder builder) {
         MODDED_GEO_BUILDERS.put(modid, builder);
@@ -37,6 +42,18 @@ public class GeoBuilder implements IGeoBuilder {
         for (RawBoneGroup rawBone : geometryTree.topLevelBones.values()) {
             model.topLevelBones.add(this.constructBone(rawBone, geometryTree.properties, null));
         }
+        model.getBone(LEFT_HAND_LOCATOR).ifPresent(b -> {
+            getBoneParent(b, model.leftHandBones);
+            Collections.reverse(model.leftHandBones);
+        });
+        model.getBone(RIGHT_HAND_LOCATOR).ifPresent(b -> {
+            getBoneParent(b, model.rightHandBones);
+            Collections.reverse(model.rightHandBones);
+        });
+        model.getBone(ELYTRA_LOCATOR_NAME).ifPresent(b -> {
+            getBoneParent(b, model.elytraBones);
+            Collections.reverse(model.elytraBones);
+        });
         return model;
     }
 
@@ -77,5 +94,12 @@ public class GeoBuilder implements IGeoBuilder {
         }
 
         return geoBone;
+    }
+
+    private void getBoneParent(GeoBone bone, List<GeoBone> boneList) {
+        boneList.add(bone);
+        if (bone.parent != null) {
+            getBoneParent(bone.parent, boneList);
+        }
     }
 }

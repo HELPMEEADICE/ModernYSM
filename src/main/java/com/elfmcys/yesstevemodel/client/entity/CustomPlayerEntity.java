@@ -42,14 +42,20 @@ public class CustomPlayerEntity implements IAnimatable {
     @SuppressWarnings("all")
     public void registerControllers(AnimationData data) {
         AnimationManager manager = AnimationManager.getInstance();
+        for (int i = 0; i < 8; i++) {
+            String controllerName = String.format("pre_parallel_%d_controller", i);
+            String animationName = String.format("pre_parallel%d", i);
+            data.addAnimationController(new AnimationController<>(this, controllerName, 2, e -> playLoopAnimation(e, animationName)));
+        }
         data.addAnimationController(new AnimationController(this, MAIN_CONTROLLER, 2, manager::predicateMain));
-        data.addAnimationController(new AnimationController(this, USE_CONTROLLER, 10, manager::predicateUse));
+        data.addAnimationController(new AnimationController(this, SWING_CONTROLLER, 2, manager::predicateSwing));
+        data.addAnimationController(new AnimationController(this, USE_CONTROLLER, 2, manager::predicateUse));
         for (int i = 0; i < 8; i++) {
             String controllerName = String.format("parallel_%d_controller", i);
             String animationName = String.format("parallel%d", i);
             data.addAnimationController(new AnimationController<>(this, controllerName, 2, e -> playLoopAnimation(e, animationName)));
         }
-        data.addAnimationController(new AnimationController(this, CAP_CONTROLLER, 5, manager::predicateCap));
+        data.addAnimationController(new AnimationController(this, CAP_CONTROLLER, 2, manager::predicateCap));
     }
 
     public ResourceLocation getMainModel() {
