@@ -53,7 +53,7 @@ public class AnimationRegister {
         register("run", Priority.LOW, (player, event) -> player.onGround() && player.isSprinting());
         register("walk", Priority.LOW, (player, event) -> player.onGround() && event.getLimbSwingAmount() > MIN_SPEED);
 
-        register("idle", Priority.LOWEST, (player, event) -> !player.isUsingItem() && !player.swinging);
+        register("idle", Priority.LOWEST, (player, event) -> true);
     }
 
     @SuppressWarnings("deprecation")

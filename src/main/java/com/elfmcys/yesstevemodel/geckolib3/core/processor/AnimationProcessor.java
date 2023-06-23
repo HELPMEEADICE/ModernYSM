@@ -98,7 +98,8 @@ public class AnimationProcessor<T extends IAnimatable> {
                     pointData.rotationValueX += valueX;
                     pointData.rotationValueY += valueY;
                     pointData.rotationValueZ += valueZ;
-                    if (controller.getName().equals(ControllerUtils.SWING_CONTROLLER) || controller.getName().equals(ControllerUtils.USE_CONTROLLER)) {
+                    if (controller.getName().equals(ControllerUtils.SWING_CONTROLLER) || controller.getName().equals(ControllerUtils.USE_CONTROLLER)
+                            || controller.getName().startsWith("parallel_")) {
                         bone.setRotationX(pointData.rotationValueX + initialSnapshot.rotationValueX);
                         bone.setRotationY(pointData.rotationValueY + initialSnapshot.rotationValueY);
                         bone.setRotationZ(pointData.rotationValueZ + initialSnapshot.rotationValueZ);
