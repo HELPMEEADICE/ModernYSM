@@ -39,7 +39,6 @@ import net.minecraft.world.entity.player.PlayerModelPart;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
-import org.joml.Vector3f;
 
 import javax.annotation.Nonnull;
 import java.util.Collections;
@@ -296,13 +295,7 @@ public abstract class GeoReplacedEntityRenderer<T extends IAnimatable> extends E
         if (pose != Pose.SLEEPING) {
             poseStack.mulPose(Axis.YP.rotationDegrees(180f - rotationYaw));
         }
-        if (entity.deathTime > 0) {
-            float deathRotation = (entity.deathTime + partialTick - 1f) / 20f * 1.6f;
-            poseStack.mulPose(Axis.ZP.rotationDegrees(Math.min(Mth.sqrt(deathRotation), 1) * getDeathMaxRotation(entity)));
-        } else if (entity.isAutoSpinAttack()) {
-            poseStack.mulPose(Axis.XP.rotationDegrees(-90f - entity.getXRot()));
-            poseStack.mulPose(Axis.YP.rotationDegrees((entity.tickCount + partialTick) * -75f));
-        } else if (pose == Pose.SLEEPING) {
+        if (pose == Pose.SLEEPING) {
             Direction bedOrientation = entity.getBedOrientation();
             poseStack.mulPose(Axis.YP.rotationDegrees(bedOrientation != null ? getFacingAngle(bedOrientation) : rotationYaw));
             poseStack.mulPose(Axis.ZP.rotationDegrees(getDeathMaxRotation(entity)));

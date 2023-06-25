@@ -9,6 +9,7 @@ import com.elfmcys.yesstevemodel.geckolib3.util.RenderUtils;
 import com.elfmcys.yesstevemodel.util.Keep;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ItemInHandRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.world.entity.HumanoidArm;
@@ -49,10 +50,9 @@ public class CustomPlayerItemInHandLayer<T extends LivingEntity & IAnimatable> e
         if (!itemStack.isEmpty() && this.entityRenderer.getGeoModel() != null) {
             poseStack.pushPose();
             translateToHand(arm, poseStack, this.entityRenderer.getGeoModel());
-            poseStack.translate(0, 0, -0.15);
+            poseStack.translate(0, -0.0625, -0.1);
             poseStack.mulPose(Axis.XP.rotationDegrees(-90.0F));
             boolean isLeftHand = arm == HumanoidArm.LEFT;
-            poseStack.translate(0, 0.15, 0);
             this.itemInHandRenderer.renderItem(livingEntity, itemStack, displayContext, isLeftHand, poseStack, bufferSource, light);
             poseStack.popPose();
         }

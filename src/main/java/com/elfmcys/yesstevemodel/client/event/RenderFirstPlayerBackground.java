@@ -51,6 +51,9 @@ public class RenderFirstPlayerBackground {
         if (GeneralConfig.DISABLE_SELF_MODEL.get()) {
             return;
         }
+        if (GeneralConfig.DISABLE_SELF_HANDS.get()) {
+            return;
+        }
         AbstractClientPlayer player = Minecraft.getInstance().player;
         if (player == null || ALREADY_RENDERED) {
             return;

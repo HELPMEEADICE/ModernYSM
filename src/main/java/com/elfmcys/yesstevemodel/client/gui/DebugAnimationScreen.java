@@ -134,6 +134,7 @@ public class DebugAnimationScreen implements IGuiOverlay {
         renderText(gui, graphics, y, "ysm.elytra_rot_z", () -> Math.toDegrees(player.elytraRotZ));
 
         renderText(gui, graphics, y, "ysm.is_close_eyes", getEyeCloseState(partialTick, player));
+        renderText(gui, graphics, y, "ysm.is_riptide", player.isAutoSpinAttack());
     }
 
     private static boolean hasCape(Player player) {

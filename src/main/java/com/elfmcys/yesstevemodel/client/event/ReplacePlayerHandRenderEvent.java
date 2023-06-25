@@ -37,6 +37,9 @@ public class ReplacePlayerHandRenderEvent {
         if (GeneralConfig.DISABLE_SELF_MODEL.get()) {
             return;
         }
+        if (GeneralConfig.DISABLE_SELF_HANDS.get()) {
+            return;
+        }
         event.setCanceled(true);
         AbstractClientPlayer player = event.getPlayer();
         player.getCapability(ModelInfoCapabilityProvider.MODEL_INFO_CAP).ifPresent(cap -> {

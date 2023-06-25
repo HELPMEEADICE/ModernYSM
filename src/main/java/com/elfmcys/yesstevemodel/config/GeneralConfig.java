@@ -7,6 +7,7 @@ public class GeneralConfig {
     public static ForgeConfigSpec.BooleanValue PRINT_ANIMATION_ROULETTE_MSG;
     public static ForgeConfigSpec.BooleanValue DISABLE_SELF_MODEL;
     public static ForgeConfigSpec.BooleanValue DISABLE_OTHER_MODEL;
+    public static ForgeConfigSpec.BooleanValue DISABLE_SELF_HANDS;
 
     public static ForgeConfigSpec init() {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -28,6 +29,9 @@ public class GeneralConfig {
 
         builder.comment("Prevents rendering of other player's model");
         DISABLE_OTHER_MODEL = builder.define("DisableOtherModel", false);
+
+        builder.comment("Prevents rendering of self player's hand");
+        DISABLE_SELF_HANDS = builder.define("DisableSelfHands", false);
 
         builder.pop();
     }
