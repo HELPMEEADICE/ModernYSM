@@ -12,6 +12,7 @@ public class GeneralConfig {
     public static ForgeConfigSpec init() {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
         init(builder);
+        ExtraPlayerScreenConfig.init(builder);
         return builder.build();
     }
 

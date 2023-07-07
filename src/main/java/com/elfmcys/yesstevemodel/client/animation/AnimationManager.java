@@ -133,17 +133,15 @@ public final class AnimationManager {
                 event.getController().shouldResetTick = true;
                 event.getController().adjustTick(0);
             }
-            return player.getCapability(ModelInfoCapabilityProvider.MODEL_INFO_CAP).map(cap -> {
-                ResourceLocation id = ModelIdUtil.getMainId(cap.getModelId());
-                ConditionalSwing conditionalSwing = ConditionManager.getSwing(id);
-                if (conditionalSwing != null) {
-                    String name = conditionalSwing.doTest(player, player.swingingArm);
-                    if (StringUtils.isNoneBlank(name)) {
-                        return playAnimation(event, name, ILoopType.EDefaultLoopTypes.LOOP);
-                    }
+            ResourceLocation id = event.getAnimatable().getAnimation();
+            ConditionalSwing conditionalSwing = ConditionManager.getSwing(id);
+            if (conditionalSwing != null) {
+                String name = conditionalSwing.doTest(player, player.swingingArm);
+                if (StringUtils.isNoneBlank(name)) {
+                    return playAnimation(event, name, ILoopType.EDefaultLoopTypes.LOOP);
                 }
-                return playAnimation(event, "swing_hand", ILoopType.EDefaultLoopTypes.LOOP);
-            }).orElse(PlayState.STOP);
+            }
+            return playAnimation(event, "swing_hand", ILoopType.EDefaultLoopTypes.LOOP);
         }
         return PlayState.STOP;
     }
@@ -159,29 +157,25 @@ public final class AnimationManager {
                 event.getController().adjustTick(0);
             }
             if (player.getUsedItemHand() == InteractionHand.MAIN_HAND) {
-                return player.getCapability(ModelInfoCapabilityProvider.MODEL_INFO_CAP).map(cap -> {
-                    ResourceLocation id = ModelIdUtil.getMainId(cap.getModelId());
-                    ConditionalUse conditionalUse = ConditionManager.getUseMainhand(id);
-                    if (conditionalUse != null) {
-                        String name = conditionalUse.doTest(player, InteractionHand.MAIN_HAND);
-                        if (StringUtils.isNoneBlank(name)) {
-                            return playAnimation(event, name, ILoopType.EDefaultLoopTypes.LOOP);
-                        }
+                ResourceLocation id = event.getAnimatable().getAnimation();
+                ConditionalUse conditionalUse = ConditionManager.getUseMainhand(id);
+                if (conditionalUse != null) {
+                    String name = conditionalUse.doTest(player, InteractionHand.MAIN_HAND);
+                    if (StringUtils.isNoneBlank(name)) {
+                        return playAnimation(event, name, ILoopType.EDefaultLoopTypes.LOOP);
                     }
-                    return playAnimation(event, "use_mainhand", ILoopType.EDefaultLoopTypes.LOOP);
-                }).orElse(PlayState.STOP);
+                }
+                return playAnimation(event, "use_mainhand", ILoopType.EDefaultLoopTypes.LOOP);
             } else {
-                return player.getCapability(ModelInfoCapabilityProvider.MODEL_INFO_CAP).map(cap -> {
-                    ResourceLocation id = ModelIdUtil.getMainId(cap.getModelId());
-                    ConditionalUse conditionalUse = ConditionManager.getUseOffhand(id);
-                    if (conditionalUse != null) {
-                        String name = conditionalUse.doTest(player, InteractionHand.OFF_HAND);
-                        if (StringUtils.isNoneBlank(name)) {
-                            return playAnimation(event, name, ILoopType.EDefaultLoopTypes.LOOP);
-                        }
+                ResourceLocation id = event.getAnimatable().getAnimation();
+                ConditionalUse conditionalUse = ConditionManager.getUseOffhand(id);
+                if (conditionalUse != null) {
+                    String name = conditionalUse.doTest(player, InteractionHand.OFF_HAND);
+                    if (StringUtils.isNoneBlank(name)) {
+                        return playAnimation(event, name, ILoopType.EDefaultLoopTypes.LOOP);
                     }
-                    return playAnimation(event, "use_offhand", ILoopType.EDefaultLoopTypes.LOOP);
-                }).orElse(PlayState.STOP);
+                }
+                return playAnimation(event, "use_offhand", ILoopType.EDefaultLoopTypes.LOOP);
             }
         }
         return PlayState.STOP;

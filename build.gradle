@@ -24,7 +24,7 @@ plugins {
     // id 'org.parchmentmc.librarian.forgegradle' version '1.+'
 }
 
-version = '1.1.4'
+version = '1.1.5'
 group = 'com.elfmcys.yesstevemodel'
 archivesBaseName = 'yesstevemodel-1.20-release'
 
@@ -44,6 +44,8 @@ minecraft {
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
             property 'forge.enabledGameTestNamespaces', 'examplemod'
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
             mods {
                 examplemod {
                     source sourceSets.main
@@ -67,6 +69,8 @@ minecraft {
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
             property 'forge.enabledGameTestNamespaces', 'examplemod'
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
             mods {
                 examplemod {
                     source sourceSets.main
@@ -80,10 +84,15 @@ minecraft {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
+    flatDir {
+        dir 'libs'
+    }
 }
 
 dependencies {
     minecraft 'net.minecraftforge:forge:1.20-46.0.14'
+    implementation fg.deobf('libs:firstperson-forge:2.2.3-mc1.20')
+    implementation fg.deobf('libs:notenoughanimations-forge:1.6.4-mc1.20')
 }
 
 jar {

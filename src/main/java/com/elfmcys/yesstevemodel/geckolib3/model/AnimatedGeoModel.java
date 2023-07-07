@@ -116,6 +116,10 @@ public abstract class AnimatedGeoModel<T extends IAnimatable> extends GeoModelPr
         return model;
     }
 
+    public GeoModel getCurrentModel() {
+        return currentModel;
+    }
+
     @Override
     @Keep
     public double getCurrentTick() {

@@ -24,6 +24,8 @@ public class GeoBuilder implements IGeoBuilder {
     private static final String LEFT_HAND_LOCATOR = "LeftHandLocator";
     private static final String RIGHT_HAND_LOCATOR = "RightHandLocator";
     private static final String ELYTRA_LOCATOR_NAME = "ElytraLocator";
+    private static final String FIRST_PERSON_HEAD_NAME = "AllHead";
+    private static final String FIRST_PERSON_VIEW_LOCATOR_NAME = "ViewLocator";
 
     public static void registerGeoBuilder(String modid, IGeoBuilder builder) {
         MODDED_GEO_BUILDERS.put(modid, builder);
@@ -54,6 +56,8 @@ public class GeoBuilder implements IGeoBuilder {
             getBoneParent(b, model.elytraBones);
             Collections.reverse(model.elytraBones);
         });
+        model.getBone(FIRST_PERSON_HEAD_NAME).ifPresent(b -> model.firstPersonHead = b);
+        model.getBone(FIRST_PERSON_VIEW_LOCATOR_NAME).ifPresent(b -> model.firstPersonViewLocator = b);
         return model;
     }
 
