@@ -46,7 +46,7 @@ public class CustomPlayerEntity implements IAnimatable {
         for (int i = 0; i < 8; i++) {
             String controllerName = String.format("pre_parallel_%d_controller", i);
             String animationName = String.format("pre_parallel%d", i);
-            data.addAnimationController(new AnimationController<>(this, controllerName, 2, e -> manager.predicateParallel(e, animationName)));
+            data.addAnimationController(new AnimationController<>(this, controllerName, 0, e -> manager.predicateParallel(e, animationName)));
         }
         data.addAnimationController(new AnimationController(this, MAIN_CONTROLLER, 2, manager::predicateMain));
         data.addAnimationController(new AnimationController(this, HOLD_CONTROLLER, 0, manager::predicateHold));
@@ -55,12 +55,12 @@ public class CustomPlayerEntity implements IAnimatable {
         for (int i = 0; i < 8; i++) {
             String controllerName = String.format("parallel_%d_controller", i);
             String animationName = String.format("parallel%d", i);
-            data.addAnimationController(new AnimationController<>(this, controllerName, 2, e -> manager.predicateParallel(e, animationName)));
+            data.addAnimationController(new AnimationController<>(this, controllerName, 0, e -> manager.predicateParallel(e, animationName)));
         }
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             if (slot.getType() == EquipmentSlot.Type.ARMOR) {
                 String controllerName = String.format("%s_controller", slot.getName());
-                data.addAnimationController(new AnimationController(this, controllerName, 2, e -> manager.predicateArmor(e, slot)));
+                data.addAnimationController(new AnimationController(this, controllerName, 0, e -> manager.predicateArmor(e, slot)));
             }
         }
         data.addAnimationController(new AnimationController(this, CAP_CONTROLLER, 2, manager::predicateCap));

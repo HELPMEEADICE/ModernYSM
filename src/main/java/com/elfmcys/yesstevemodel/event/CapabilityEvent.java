@@ -44,21 +44,19 @@ public final class CapabilityEvent {
 
     @SubscribeEvent
     public static void onPlayerCloned(PlayerEvent.Clone event) {
-        if (event.isWasDeath()) {
-            event.getOriginal().reviveCaps();
-            LazyOptional<ModelInfoCapability> oldModelInfoCap = getModelInfoCap(event.getOriginal());
-            LazyOptional<AuthModelsCapability> oldAuthModelsCap = getAuthModelsCap(event.getOriginal());
-            LazyOptional<StarModelsCapability> oldStarModelsCap = getStarModelsCap(event.getOriginal());
-            event.getOriginal().invalidateCaps();
+        event.getOriginal().reviveCaps();
+        LazyOptional<ModelInfoCapability> oldModelInfoCap = getModelInfoCap(event.getOriginal());
+        LazyOptional<AuthModelsCapability> oldAuthModelsCap = getAuthModelsCap(event.getOriginal());
+        LazyOptional<StarModelsCapability> oldStarModelsCap = getStarModelsCap(event.getOriginal());
+        event.getOriginal().invalidateCaps();
 
-            LazyOptional<ModelInfoCapability> newModelInfoCap = getModelInfoCap(event.getEntity());
-            LazyOptional<AuthModelsCapability> newAuthModelsCap = getAuthModelsCap(event.getEntity());
-            LazyOptional<StarModelsCapability> newStarModelsCap = getStarModelsCap(event.getEntity());
+        LazyOptional<ModelInfoCapability> newModelInfoCap = getModelInfoCap(event.getEntity());
+        LazyOptional<AuthModelsCapability> newAuthModelsCap = getAuthModelsCap(event.getEntity());
+        LazyOptional<StarModelsCapability> newStarModelsCap = getStarModelsCap(event.getEntity());
 
-            newModelInfoCap.ifPresent((newModelInfo) -> oldModelInfoCap.ifPresent(newModelInfo::copyFrom));
-            newAuthModelsCap.ifPresent((newAuthModels) -> oldAuthModelsCap.ifPresent(newAuthModels::copyFrom));
-            newStarModelsCap.ifPresent((newStarModels) -> oldStarModelsCap.ifPresent(newStarModels::copyFrom));
-        }
+        newModelInfoCap.ifPresent((newModelInfo) -> oldModelInfoCap.ifPresent(newModelInfo::copyFrom));
+        newAuthModelsCap.ifPresent((newAuthModels) -> oldAuthModelsCap.ifPresent(newAuthModels::copyFrom));
+        newStarModelsCap.ifPresent((newStarModels) -> oldStarModelsCap.ifPresent(newStarModels::copyFrom));
     }
 
     @SubscribeEvent
