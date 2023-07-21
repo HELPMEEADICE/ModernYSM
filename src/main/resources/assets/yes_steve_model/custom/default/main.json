@@ -8,7 +8,13 @@
 				"texture_height": 128,
 				"visible_bounds_width": 7,
 				"visible_bounds_height": 5,
-				"visible_bounds_offset": [0, 1.5, 0]
+				"visible_bounds_offset": [0, 1.5, 0],
+				"ysm_extra_info": {
+					"name": "Default",
+					"tips": "默认模型（Default Model）",
+					"authors": ["哥斯拉", "端木", "甜粽子"],
+					"license": "CC 0"
+				}
 			},
 			"bones": [
 				{

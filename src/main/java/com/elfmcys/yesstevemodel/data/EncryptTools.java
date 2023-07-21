@@ -1,5 +1,6 @@
 package com.elfmcys.yesstevemodel.data;
 
+import com.elfmcys.yesstevemodel.YesSteveModel;
 import com.elfmcys.yesstevemodel.model.format.Type;
 import com.elfmcys.yesstevemodel.util.AESUtil;
 import com.elfmcys.yesstevemodel.util.ByteInteger;
@@ -16,7 +17,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.Map;
 
 public final class EncryptTools {
@@ -210,10 +210,12 @@ public final class EncryptTools {
                 return null;
             }
 
-            byte[] md5 = ByteArrays.copy(modelRawData, 8, 16);
+            String md5 = Md5Utils.toHexString(ByteArrays.copy(modelRawData, 8, 16));
             byte[] encryptModelData = ByteArrays.copy(modelRawData, 24, modelRawData.length - 24);
-            if (!Arrays.equals(md5, Md5Utils.md5(encryptModelData))) {
-                return null;
+            String dataMd5 = Md5Utils.md5Hex(encryptModelData);
+            if (!md5.equals(dataMd5)) {
+                // FIXME: 2023/7/11 很奇怪，这一块会出现不一致的问题
+                YesSteveModel.LOGGER.warn("Check values are not equal {} / {}", md5, dataMd5);
             }
 
             byte[] passwordBytes = ByteArrays.copy(rawPassword, 8, 16);

@@ -5,13 +5,34 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+
+import java.util.Collections;
+import java.util.List;
 
 public class FlatColorButton extends Button {
     private boolean isSelect = false;
+    private List<Component> tooltips;
 
     public FlatColorButton(int pX, int pY, int pWidth, int pHeight, Component pMessage, OnPress pOnPress) {
         super(pX, pY, pWidth, pHeight, pMessage, pOnPress, DEFAULT_NARRATION);
+    }
+
+    public FlatColorButton setTooltips(String key) {
+        tooltips = Collections.singletonList(Component.translatable(key));
+        return this;
+    }
+
+    public FlatColorButton setTooltips(List<Component> tooltips) {
+        this.tooltips = tooltips;
+        return this;
+    }
+
+    public void renderToolTip(GuiGraphics graphics, Screen screen, int pMouseX, int pMouseY) {
+        if (this.isHovered && tooltips != null) {
+            graphics.renderComponentTooltip(screen.getMinecraft().font, tooltips, pMouseX, pMouseY);
+        }
     }
 
     @Override

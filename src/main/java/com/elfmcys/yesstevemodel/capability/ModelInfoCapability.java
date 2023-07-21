@@ -1,13 +1,14 @@
 package com.elfmcys.yesstevemodel.capability;
 
 import com.elfmcys.yesstevemodel.YesSteveModel;
+import com.elfmcys.yesstevemodel.config.GeneralConfig;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 
 public class ModelInfoCapability {
-    private ResourceLocation modelId = new ResourceLocation(YesSteveModel.MOD_ID, "default");
-    private ResourceLocation selectTexture = new ResourceLocation(YesSteveModel.MOD_ID, "default/default.png");
-    private String animation = "default";
+    private ResourceLocation modelId = new ResourceLocation(YesSteveModel.MOD_ID, GeneralConfig.DEFAULT_MODEL_ID.get());
+    private ResourceLocation selectTexture = new ResourceLocation(YesSteveModel.MOD_ID, GeneralConfig.DEFAULT_MODEL_ID.get() + "/" + GeneralConfig.DEFAULT_MODEL_TEXTURE.get());
+    private String animation = "idle";
     private boolean playAnimation = false;
     private boolean dirty;
 

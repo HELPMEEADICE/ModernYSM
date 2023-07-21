@@ -8,6 +8,8 @@ public class GeneralConfig {
     public static ForgeConfigSpec.BooleanValue DISABLE_SELF_MODEL;
     public static ForgeConfigSpec.BooleanValue DISABLE_OTHER_MODEL;
     public static ForgeConfigSpec.BooleanValue DISABLE_SELF_HANDS;
+    public static ForgeConfigSpec.ConfigValue<String> DEFAULT_MODEL_ID;
+    public static ForgeConfigSpec.ConfigValue<String> DEFAULT_MODEL_TEXTURE;
 
     public static ForgeConfigSpec init() {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -33,6 +35,12 @@ public class GeneralConfig {
 
         builder.comment("Prevents rendering of self player's hand");
         DISABLE_SELF_HANDS = builder.define("DisableSelfHands", false);
+
+        builder.comment("The default model ID when a player first enters the game");
+        DEFAULT_MODEL_ID = builder.define("DefaultModelId", "default");
+
+        builder.comment("The default model texture when a player first enters the game");
+        DEFAULT_MODEL_TEXTURE = builder.define("DefaultModelTexture", "default.png");
 
         builder.pop();
     }

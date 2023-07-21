@@ -1,5 +1,6 @@
 package com.elfmcys.yesstevemodel.client.gui;
 
+import com.elfmcys.yesstevemodel.client.compat.FirstPersonCompat;
 import com.elfmcys.yesstevemodel.client.event.ReloadResourceEvent;
 import com.elfmcys.yesstevemodel.client.input.DebugAnimationKey;
 import com.elfmcys.yesstevemodel.geckolib3.util.MolangUtils;
@@ -24,11 +25,14 @@ import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.gui.overlay.ForgeGui;
 import net.minecraftforge.client.gui.overlay.IGuiOverlay;
+import net.minecraftforge.fml.ModList;
 
 import java.util.Locale;
 import java.util.function.DoubleSupplier;
 
 public class DebugAnimationScreen implements IGuiOverlay {
+    public static final String FIRST_PERSON_MOD_ID = "firstpersonmod";
+
     @Override
     public void render(ForgeGui gui, GuiGraphics graphics, float partialTick, int screenWidth, int screenHeight) {
         if (!DebugAnimationKey.DEBUG) {
@@ -135,6 +139,10 @@ public class DebugAnimationScreen implements IGuiOverlay {
 
         renderText(gui, graphics, y, "ysm.is_close_eyes", getEyeCloseState(partialTick, player));
         renderText(gui, graphics, y, "ysm.is_riptide", player.isAutoSpinAttack());
+
+        if (ModList.get().isLoaded(FIRST_PERSON_MOD_ID)) {
+            renderText(gui, graphics, y, "ysm.first_person_mod_hide", FirstPersonCompat.isHeadHide());
+        }
     }
 
     private static boolean hasCape(Player player) {

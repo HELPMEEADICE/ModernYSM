@@ -12,8 +12,11 @@ public class FirstPersonCompat {
     }
 
     public static void registerOffset() {
-        FirstPersonAPI.registerPlayerHandler((PlayerOffsetHandler) (entity, delta, original, current) -> {
-            return new Vec3(current.x(), 1.5 - CustomPlayerModel.FIRST_PERSON_HEAD_POS / 16, current.z());
-        });
+        FirstPersonAPI.registerPlayerHandler((PlayerOffsetHandler) (entity, delta, original, current) ->
+                new Vec3(current.x(), 1.5 - CustomPlayerModel.FIRST_PERSON_HEAD_POS / 16, current.z()));
+    }
+
+    public static boolean isHeadHide() {
+        return FirstPersonAPI.isRenderingPlayer();
     }
 }

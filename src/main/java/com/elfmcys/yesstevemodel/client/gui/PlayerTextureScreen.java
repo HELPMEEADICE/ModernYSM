@@ -7,8 +7,10 @@ import com.elfmcys.yesstevemodel.client.gui.button.FlatIconButton;
 import com.elfmcys.yesstevemodel.client.gui.button.TextureButton;
 import com.elfmcys.yesstevemodel.util.Keep;
 import com.elfmcys.yesstevemodel.util.RenderUtil;
+import com.google.common.collect.Lists;
 import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -126,7 +128,12 @@ public class PlayerTextureScreen extends Screen {
             }
             String name = animations.get(animationIndex);
             int yStart = y + 27 + 17 * i;
-            addRenderableWidget(new FlatColorButton(x + 5, yStart, 80, 16, Component.literal(name), b -> this.animation = name));
+            String key = String.format("gui.yes_steve_model.texture.button.%s", name.replaceAll("\\:", "."));
+            String keyDesc = String.format("gui.yes_steve_model.texture.button.%s.desc", name.replaceAll("\\:", "."));
+            FlatColorButton sideButton = new FlatColorButton(x + 5, yStart, 80, 16, Component.translatable(key), b -> this.animation = name);
+            sideButton.setTooltips(Lists.newArrayList(Component.translatable(keyDesc).withStyle(ChatFormatting.GOLD),
+                    Component.translatable("gui.yes_steve_model.texture.button.animation_name", name).withStyle(ChatFormatting.GRAY)));
+            addRenderableWidget(sideButton);
         }
 
         for (int i = 0; i < 4; i++) {
@@ -176,8 +183,8 @@ public class PlayerTextureScreen extends Screen {
         graphics.drawString(font, animationPageInfo, x + 5 + (80 - font.width(animationPageInfo)) / 2, y + 218, 0xF3EFE0);
 
         super.render(graphics, mouseX, mouseY, partialTick);
-        this.renderables.stream().filter(r -> r instanceof FlatIconButton)
-                .forEach(r -> ((FlatIconButton) r).renderToolTip(graphics, this, mouseX, mouseY));
+        this.renderables.stream().filter(r -> r instanceof FlatColorButton)
+                .forEach(r -> ((FlatColorButton) r).renderToolTip(graphics, this, mouseX, mouseY));
     }
 
     @Override

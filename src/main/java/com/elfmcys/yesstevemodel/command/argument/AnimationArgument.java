@@ -22,7 +22,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 public class AnimationArgument implements ArgumentType<String> {
-    private static final Collection<String> EXAMPLES = Collections.singleton("default");
+    private static final Collection<String> EXAMPLES = Collections.singleton("idle");
     private static final String STOP = "stop";
 
     private AnimationArgument() {

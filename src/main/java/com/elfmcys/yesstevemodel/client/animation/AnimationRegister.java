@@ -1,5 +1,6 @@
 package com.elfmcys.yesstevemodel.client.animation;
 
+import com.elfmcys.yesstevemodel.client.compat.FirstPersonCompat;
 import com.elfmcys.yesstevemodel.client.entity.CustomPlayerEntity;
 import com.elfmcys.yesstevemodel.geckolib3.core.builder.ILoopType;
 import com.elfmcys.yesstevemodel.geckolib3.core.event.predicate.AnimationEvent;
@@ -24,11 +25,13 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.fml.ModList;
 
 import java.util.function.BiPredicate;
 
 public class AnimationRegister {
     private static final double MIN_SPEED = 0.05;
+    private static final String FIRST_PERSON_MOD_ID = "firstpersonmod";
 
     public static void registerAnimationState() {
         register("death", ILoopType.EDefaultLoopTypes.PLAY_ONCE, Priority.HIGHEST, (player, event) -> player.isDeadOrDying());
@@ -134,6 +137,9 @@ public class AnimationRegister {
 
         parser.register(new LazyVariable("ysm.armor_value", 0));
         parser.register(new LazyVariable("ysm.hurt_time", 0));
+        parser.register(new LazyVariable("ysm.food_level", 20));
+
+        parser.register(new LazyVariable("ysm.first_person_mod_hide", MolangUtils.FALSE));
     }
 
     public static void setParserValue(AnimationEvent<CustomPlayerEntity> animationEvent, MolangParser parser, EntityModelData data, Player player) {
@@ -228,6 +234,11 @@ public class AnimationRegister {
 
         parser.setValue("ysm.armor_value", player::getArmorValue);
         parser.setValue("ysm.hurt_time", () -> player.hurtTime);
+        parser.setValue("ysm.food_level", () -> player.getFoodData().getFoodLevel());
+
+        if (ModList.get().isLoaded(FIRST_PERSON_MOD_ID)) {
+            parser.setValue("ysm.first_person_mod_hide", () -> MolangUtils.booleanToFloat(FirstPersonCompat.isHeadHide()));
+        }
     }
 
     private static boolean hasCape(Player player) {

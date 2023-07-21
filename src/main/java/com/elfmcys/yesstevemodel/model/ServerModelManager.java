@@ -116,6 +116,15 @@ public final class ServerModelManager {
         GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/default/main.animation.json"), defaultPath, MAIN_ANIMATION_FILE_NAME);
         GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/default/arm.animation.json"), defaultPath, ARM_ANIMATION_FILE_NAME);
         GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/default/extra.animation.json"), defaultPath, EXTRA_ANIMATION_FILE_NAME);
+
+        Path defaultBoyPath = CUSTOM.resolve("default_boy");
+        createFolder(defaultBoyPath);
+
+        GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/default_boy/main.json"), defaultBoyPath, MAIN_MODEL_FILE_NAME);
+        GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/default_boy/arm.json"), defaultBoyPath, ARM_MODEL_FILE_NAME);
+        GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/default_boy/red.png"), defaultBoyPath, "red.png");
+        GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/default_boy/blue.png"), defaultBoyPath, "blue.png");
+        GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/default_boy/main.animation.json"), defaultBoyPath, MAIN_ANIMATION_FILE_NAME);
     }
 
     private static void copyVanillaModel() {
@@ -132,6 +141,12 @@ public final class ServerModelManager {
         GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/alex/arm.json"), alexPath, ARM_MODEL_FILE_NAME);
         GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/alex/gsl.png"), alexPath, "gsl.png");
         GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/alex/main.animation.json"), alexPath, MAIN_ANIMATION_FILE_NAME);
+
+        Path qinglukaPath = CUSTOM.resolve("qingluka");
+        createFolder(qinglukaPath);
+        GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/qingluka/main.json"), qinglukaPath, MAIN_MODEL_FILE_NAME);
+        GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/qingluka/arm.json"), qinglukaPath, ARM_MODEL_FILE_NAME);
+        GetJarResources.copyYesSteveModelFile(getCustomFiles("custom/qingluka/texture.png"), qinglukaPath, "texture.png");
     }
 
     private static void copyWineFoxModel() {

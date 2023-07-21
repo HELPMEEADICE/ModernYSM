@@ -22,7 +22,7 @@ public final class Md5Utils {
         return DIGEST.digest(data);
     }
 
-    private static String toHexString(byte[] bytes) {
+    public static String toHexString(byte[] bytes) {
         StringBuilder hexString = new StringBuilder();
         for (byte b : bytes) {
             String hex = Integer.toHexString(0xFF & b);

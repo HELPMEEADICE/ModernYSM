@@ -11,7 +11,6 @@ import com.elfmcys.yesstevemodel.geckolib3.core.molang.MolangParser;
 import com.elfmcys.yesstevemodel.geckolib3.core.snapshot.BoneSnapshot;
 import com.elfmcys.yesstevemodel.geckolib3.core.snapshot.DirtyTracker;
 import com.elfmcys.yesstevemodel.geckolib3.core.util.MathUtil;
-import com.elfmcys.yesstevemodel.util.ControllerUtils;
 import com.google.common.collect.Maps;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.ints.IntSet;
@@ -160,7 +159,8 @@ public class AnimationProcessor<T extends IAnimatable> {
 
             if (!tracker.getValue().hasRotationChanged) {
                 if (saveSnapshot.isCurrentlyRunningRotationAnimation) {
-                    saveSnapshot.mostRecentResetRotationTick = (float) seekTime;
+                    // FIXME: 2023/7/12 莫名其妙修好了旋转 bug，原因未知
+                    saveSnapshot.mostRecentResetRotationTick = 0;
                     saveSnapshot.isCurrentlyRunningRotationAnimation = false;
                 }
                 double percentageReset = Math.min((seekTime - saveSnapshot.mostRecentResetRotationTick) / resetTickLength, 1);

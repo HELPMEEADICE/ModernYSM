@@ -15,6 +15,7 @@ import com.elfmcys.yesstevemodel.geckolib3.resource.GeckoLibCache;
 import com.elfmcys.yesstevemodel.geckolib3.util.GeckoLibUtil;
 import com.elfmcys.yesstevemodel.util.Keep;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
@@ -45,7 +46,7 @@ public class CustomPlayerEntity implements IAnimatable {
         for (int i = 0; i < 8; i++) {
             String controllerName = String.format("pre_parallel_%d_controller", i);
             String animationName = String.format("pre_parallel%d", i);
-            data.addAnimationController(new AnimationController<>(this, controllerName, 2, e -> playLoopAnimation(e, animationName)));
+            data.addAnimationController(new AnimationController<>(this, controllerName, 2, e -> manager.predicateParallel(e, animationName)));
         }
         data.addAnimationController(new AnimationController(this, MAIN_CONTROLLER, 2, manager::predicateMain));
         data.addAnimationController(new AnimationController(this, HOLD_CONTROLLER, 0, manager::predicateHold));
@@ -54,7 +55,13 @@ public class CustomPlayerEntity implements IAnimatable {
         for (int i = 0; i < 8; i++) {
             String controllerName = String.format("parallel_%d_controller", i);
             String animationName = String.format("parallel%d", i);
-            data.addAnimationController(new AnimationController<>(this, controllerName, 2, e -> playLoopAnimation(e, animationName)));
+            data.addAnimationController(new AnimationController<>(this, controllerName, 2, e -> manager.predicateParallel(e, animationName)));
+        }
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            if (slot.getType() == EquipmentSlot.Type.ARMOR) {
+                String controllerName = String.format("%s_controller", slot.getName());
+                data.addAnimationController(new AnimationController(this, controllerName, 2, e -> manager.predicateArmor(e, slot)));
+            }
         }
         data.addAnimationController(new AnimationController(this, CAP_CONTROLLER, 2, manager::predicateCap));
     }
