@@ -49,7 +49,8 @@ public class CustomPlayerEntity implements IAnimatable {
             data.addAnimationController(new AnimationController<>(this, controllerName, 0, e -> manager.predicateParallel(e, animationName)));
         }
         data.addAnimationController(new AnimationController(this, MAIN_CONTROLLER, 2, manager::predicateMain));
-        data.addAnimationController(new AnimationController(this, HOLD_CONTROLLER, 0, manager::predicateHold));
+        data.addAnimationController(new AnimationController(this, HOLD_OFFHAND_CONTROLLER, 0, manager::predicateOffhandHold));
+        data.addAnimationController(new AnimationController(this, HOLD_MAINHAND_CONTROLLER, 0, manager::predicateMainhandHold));
         data.addAnimationController(new AnimationController(this, SWING_CONTROLLER, 2, manager::predicateSwing));
         data.addAnimationController(new AnimationController(this, USE_CONTROLLER, 2, manager::predicateUse));
         for (int i = 0; i < 8; i++) {

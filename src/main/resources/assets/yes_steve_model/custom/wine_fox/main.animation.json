@@ -1315,7 +1315,6 @@
 			"animation_length": 0.6667,
 			"bones": {
 				"Root": {
-					"rotation": [0, 0, "ysm.head_yaw/2"],
 					"position": {
 						"0.0": [0, -0.9, 0.2],
 						"0.0417": [0, -1.3, 0.01],
@@ -7645,9 +7644,6 @@
 				},
 				"LongHair": {
 					"rotation": ["(ysm.head_pitch > 0) ? ysm.head_pitch : ((ysm.head_pitch < -55)?-55:ysm.head_pitch)", 0, 0]
-				},
-				"Root": {
-					"rotation": ["ysm.head_pitch/9", 0, 0]
 				},
 				"wasit": {
 					"rotation": ["-ysm.head_pitch/3", "-ysm.head_yaw /3", 0]
