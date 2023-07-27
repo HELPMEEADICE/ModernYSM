@@ -3551,6 +3551,18 @@
 					"pivot": [0, 30.9644, 3]
 				},
 				{
+					"name": "RifleLocator",
+					"parent": "UpperBody",
+					"pivot": [0, 25.15, 2.3],
+					"rotation": [0, 0, 45]
+				},
+				{
+					"name": "PistolLocator",
+					"parent": "UpperBody",
+					"pivot": [-4, 22.75, -0.6],
+					"rotation": [-30, 0, 0]
+				},
+				{
 					"name": "clothe",
 					"parent": "UpBody",
 					"pivot": [0, 22.825, -0.075]

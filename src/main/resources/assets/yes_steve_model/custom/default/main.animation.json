@@ -1113,6 +1113,7 @@
 			"animation_length": 0.6667,
 			"bones": {
 				"Root": {
+					"rotation": [0, 0, "0.4*ysm.head_yaw"],
 					"position": {
 						"0.0": [0, -0.9, 0.2],
 						"0.0417": [0, -1.3, 0.01],
@@ -4958,6 +4959,9 @@
 				"RightEyebrow": {
 					"position": [0, "ysm.is_close_eyes ? -1 : 0", 0]
 				},
+				"Eyelid": {
+					"scale": "ysm.is_close_eyes ? 0 : 1"
+				},
 				"long_h1": {
 					"rotation": ["(ysm.head_pitch>0)?(0.9*ysm.head_pitch):(0.2*ysm.head_pitch)", 0, 0]
 				}
@@ -4971,6 +4975,9 @@
 				},
 				"LeftEyesBase": {
 					"position": ["ysm.head_yaw/180", "ysm.head_pitch/360", 0]
+				},
+				"LongHair": {
+					"rotation": ["(ysm.head_pitch > 0) ? ysm.head_pitch : ((ysm.head_pitch < -55)?-55:ysm.head_pitch)", 0, 0]
 				}
 			}
 		},

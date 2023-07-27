@@ -217,7 +217,7 @@ public abstract class GeoReplacedEntityRenderer<T extends IAnimatable> extends E
 
         float headPitch = Mth.lerp(partialTick, entity.xRotO, entity.getXRot());
         entityModelData.headPitch = -headPitch;
-        entityModelData.netHeadYaw = -netHeadYaw;
+        entityModelData.netHeadYaw = -Mth.clamp(Mth.wrapDegrees(netHeadYaw), -85, 85);
         GeoModel model = this.modelProvider.getModel(this.modelProvider.getModelLocation(animatable));
         AnimationEvent predicate = new AnimationEvent(animatable, limbSwing, limbSwingAmount, partialTick,
                 (limbSwingAmount <= -getSwingMotionAnimThreshold() || limbSwingAmount <= getSwingMotionAnimThreshold()), Collections.singletonList(entityModelData));

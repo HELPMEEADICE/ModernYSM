@@ -692,6 +692,18 @@
 					"pivot": [0, 23, 2]
 				},
 				{
+					"name": "RifleLocator",
+					"parent": "UpperBody",
+					"pivot": [0, 18, 2],
+					"rotation": [0, 0, 45]
+				},
+				{
+					"name": "PistolLocator",
+					"parent": "UpperBody",
+					"pivot": [-4, 15, 0],
+					"rotation": [-30, 0, 0]
+				},
+				{
 					"name": "DownBody",
 					"parent": "AllBody",
 					"pivot": [-1.9, 12, 0]

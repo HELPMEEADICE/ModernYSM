@@ -1236,6 +1236,23 @@
 					]
 				},
 				{
+					"name": "ElytraLocator",
+					"parent": "UpBody",
+					"pivot": [0, 26, 1.5]
+				},
+				{
+					"name": "RifleLocator",
+					"parent": "UpBody",
+					"pivot": [0, 22, 2],
+					"rotation": [0, 0, 45]
+				},
+				{
+					"name": "PistolLocator",
+					"parent": "UpBody",
+					"pivot": [-3, 18.25, 0],
+					"rotation": [-30, 0, 0]
+				},
+				{
 					"name": "DownBody",
 					"parent": "AllBody",
 					"pivot": [0, 17.135, 0]

@@ -160,8 +160,8 @@ public class AnimationRegister {
 
         parser.setValue("query.has_cape", () -> MolangUtils.booleanToFloat(hasCape(player)));
         parser.setValue("query.has_rider", () -> MolangUtils.booleanToFloat(player.isVehicle()));
-        parser.setValue("query.head_x_rotation", () -> Mth.clamp(data.netHeadYaw, -85, 85));
-        parser.setValue("query.head_y_rotation", () -> Mth.clamp(data.headPitch, -90, 90));
+        parser.setValue("query.head_x_rotation", () -> data.netHeadYaw);
+        parser.setValue("query.head_y_rotation", () -> data.headPitch);
         parser.setValue("query.health", player::getHealth);
         parser.setValue("query.hurt_time", () -> player.hurtTime);
 
@@ -196,8 +196,8 @@ public class AnimationRegister {
         parser.setValue("query.walk_distance", () -> player.moveDist);
         parser.setValue("query.yaw_speed", () -> getYawSpeed(animationEvent, player));
 
-        parser.setValue("ysm.head_yaw", () -> Mth.clamp(data.netHeadYaw, -85, 85));
-        parser.setValue("ysm.head_pitch", () -> Mth.clamp(data.headPitch, -90, 90));
+        parser.setValue("ysm.head_yaw", () -> data.netHeadYaw);
+        parser.setValue("ysm.head_pitch", () -> data.headPitch);
 
         parser.setValue("ysm.has_helmet", () -> getSlotValue(player, EquipmentSlot.HEAD));
         parser.setValue("ysm.has_chest_plate", () -> getSlotValue(player, EquipmentSlot.CHEST));
