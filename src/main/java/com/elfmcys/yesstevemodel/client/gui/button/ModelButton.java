@@ -5,6 +5,7 @@ import com.elfmcys.yesstevemodel.capability.ModelInfoCapabilityProvider;
 import com.elfmcys.yesstevemodel.capability.StarModelsCapabilityProvider;
 import com.elfmcys.yesstevemodel.network.NetworkHandler;
 import com.elfmcys.yesstevemodel.network.message.SetModelAndTexture;
+import com.elfmcys.yesstevemodel.network.message.SetNpcModelAndTexture;
 import com.elfmcys.yesstevemodel.util.Keep;
 import com.elfmcys.yesstevemodel.util.RenderUtil;
 import com.mojang.blaze3d.platform.Window;
@@ -18,6 +19,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.world.entity.player.Player;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.List;
@@ -28,14 +30,16 @@ public class ModelButton extends Button {
     private final boolean needAuth;
     private final int color;
     private final List<Component> tooltips;
+    private final Player player;
 
-    public ModelButton(int pX, int pY, boolean needAuth, Pair<ResourceLocation, List<ResourceLocation>> modelInfo, List<Component> tooltips) {
+    public ModelButton(int pX, int pY, boolean needAuth, Pair<ResourceLocation, List<ResourceLocation>> modelInfo, List<Component> tooltips, Player player) {
         super(pX, pY, 52, 90, Component.literal(modelInfo.getLeft().getPath()), (b) -> {
         }, DEFAULT_NARRATION);
         this.modelInfo = modelInfo;
         this.needAuth = needAuth;
         this.color = needAuth ? 0x7F_000000 : 0xFF_434242;
         this.tooltips = tooltips;
+        this.player = player;
     }
 
     @Override
@@ -44,12 +48,14 @@ public class ModelButton extends Button {
         if (needAuth) {
             return;
         }
-        LocalPlayer player = Minecraft.getInstance().player;
-        if (player != null) {
-            player.getCapability(ModelInfoCapabilityProvider.MODEL_INFO_CAP).ifPresent(cap ->
-                    cap.setModelAndTexture(modelInfo.getLeft(), modelInfo.getRight().get(0)));
+        player.getCapability(ModelInfoCapabilityProvider.MODEL_INFO_CAP).ifPresent(cap ->
+                cap.setModelAndTexture(modelInfo.getLeft(), modelInfo.getRight().get(0)));
+        LocalPlayer localPlayer = Minecraft.getInstance().player;
+        if (player.equals(localPlayer)) {
+            NetworkHandler.CHANNEL.sendToServer(new SetModelAndTexture(modelInfo.getLeft(), modelInfo.getRight().get(0)));
+        } else {
+            NetworkHandler.CHANNEL.sendToServer(new SetNpcModelAndTexture(modelInfo.getLeft(), modelInfo.getRight().get(0), player.getId()));
         }
-        NetworkHandler.CHANNEL.sendToServer(new SetModelAndTexture(modelInfo.getLeft(), modelInfo.getRight().get(0)));
     }
 
     @Override
@@ -66,7 +72,7 @@ public class ModelButton extends Button {
         int scissorW = (int) (this.width * scale);
         int scissorH = (int) ((this.height - 20) * scale);
         RenderSystem.enableScissor(scissorX, scissorY, scissorW, scissorH);
-        RenderUtil.renderEntityInInventory(this.getX() + this.width / 2, this.getY() + this.height / 2 + 20, 30, minecraft.player, modelInfo.getLeft(), modelInfo.getRight().get(0));
+        RenderUtil.renderEntityInInventory(this.getX() + this.width / 2, this.getY() + this.height / 2 + 20, 30, player, modelInfo.getLeft(), modelInfo.getRight().get(0));
         RenderSystem.disableScissor();
 
         Component message = this.getMessage();
@@ -84,13 +90,12 @@ public class ModelButton extends Button {
             graphics.fillGradient(this.getX(), this.getY() + this.height - 1, this.getX() + this.width, this.getY() + this.height, 0xff_F3EFE0, 0xff_F3EFE0);
         }
 
-        if (minecraft.player != null) {
-            minecraft.player.getCapability(StarModelsCapabilityProvider.STAR_MODELS_CAP).ifPresent(cap -> {
-                if (cap.containModel(modelInfo.getLeft())) {
-                    graphics.blit(ICON, this.getX() + this.width - 14, this.getY(), 16, 16, 16, 0, 16, 16, 256, 256);
-                }
-            });
-        }
+
+        player.getCapability(StarModelsCapabilityProvider.STAR_MODELS_CAP).ifPresent(cap -> {
+            if (cap.containModel(modelInfo.getLeft())) {
+                graphics.blit(ICON, this.getX() + this.width - 14, this.getY(), 16, 16, 16, 0, 16, 16, 256, 256);
+            }
+        });
 
         if (needAuth) {
             graphics.fillGradient(this.getX(), this.getY(), this.getX() + this.width, this.getY() + this.height, 0x9f_222222, 0x9f_222222);

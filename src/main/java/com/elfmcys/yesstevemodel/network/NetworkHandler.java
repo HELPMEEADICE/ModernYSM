@@ -48,6 +48,8 @@ public final class NetworkHandler {
                 Optional.of(NetworkDirection.PLAY_TO_SERVER));
         CHANNEL.registerMessage(14, HandleFile.class, HandleFile::encode, HandleFile::decode, HandleFile::handle,
                 Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(15, SetNpcModelAndTexture.class, SetNpcModelAndTexture::encode, SetNpcModelAndTexture::decode, SetNpcModelAndTexture::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
     }
 
     public static void sendToClientPlayer(Object message, Player player) {

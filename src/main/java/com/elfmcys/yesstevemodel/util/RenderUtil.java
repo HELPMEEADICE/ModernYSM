@@ -10,7 +10,6 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.texture.OverlayTexture;
@@ -19,6 +18,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
 import org.joml.Quaternionf;
@@ -28,7 +28,7 @@ import java.util.function.Consumer;
 
 @SuppressWarnings("all")
 public final class RenderUtil {
-    public static void renderTextureScreenEntity(float pPosX, float pPosY, float pScale, float pitch, float yaw, LocalPlayer player, ResourceLocation modelId, ResourceLocation textureId, boolean showGround, Consumer<CustomPlayerEntity> consumer) {
+    public static void renderTextureScreenEntity(float pPosX, float pPosY, float pScale, float pitch, float yaw, Player player, ResourceLocation modelId, ResourceLocation textureId, boolean showGround, Consumer<CustomPlayerEntity> consumer) {
         if (player == null) {
             return;
         }
@@ -172,7 +172,7 @@ public final class RenderUtil {
 
     }
 
-    private static void renderExtraEntity(float yaw, LocalPlayer player, CustomPlayerEntity playerEntity, PoseStack poseStack, EntityRenderDispatcher dispatcher, MultiBufferSource.BufferSource bufferSource) throws ExecutionException {
+    private static void renderExtraEntity(float yaw, Player player, CustomPlayerEntity playerEntity, PoseStack poseStack, EntityRenderDispatcher dispatcher, MultiBufferSource.BufferSource bufferSource) throws ExecutionException {
         if (playerEntity.hasPreviewAnimation("ride")) {
             Entity entity = AnimatableCacheUtil.ENTITIES_CACHE.get(EntityType.getKey(EntityType.HORSE), () -> EntityType.HORSE.create(player.level()));
             renderExtraEntity(yaw, player, poseStack, dispatcher, bufferSource, entity);
@@ -190,12 +190,12 @@ public final class RenderUtil {
         }
     }
 
-    private static void renderExtraEntity(float yaw, LocalPlayer player, PoseStack poseStack, EntityRenderDispatcher dispatcher, MultiBufferSource.BufferSource bufferSource, Entity entity) {
+    private static void renderExtraEntity(float yaw, Player player, PoseStack poseStack, EntityRenderDispatcher dispatcher, MultiBufferSource.BufferSource bufferSource, Entity entity) {
         poseStack.mulPose(Axis.YP.rotationDegrees(yaw));
         dispatcher.render(entity, 0, -entity.getPassengersRidingOffset() - player.getMyRidingOffset(), 0, 0, 1.0f, poseStack, bufferSource, 0xf000f0);
     }
 
-    public static void renderEntityInInventory(int pPosX, int pPosY, int pScale, LocalPlayer player, ResourceLocation modelId, ResourceLocation textureId, Consumer<CustomPlayerEntity> consumer) {
+    public static void renderEntityInInventory(int pPosX, int pPosY, int pScale, Player player, ResourceLocation modelId, ResourceLocation textureId, Consumer<CustomPlayerEntity> consumer) {
         if (player == null) {
             return;
         }
@@ -211,7 +211,7 @@ public final class RenderUtil {
         }
     }
 
-    public static void renderEntityInInventory(int pPosX, int pPosY, int pScale, LocalPlayer player, ResourceLocation modelId, ResourceLocation textureId) {
+    public static void renderEntityInInventory(int pPosX, int pPosY, int pScale, Player player, ResourceLocation modelId, ResourceLocation textureId) {
         renderEntityInInventory(pPosX, pPosY, pScale, player, modelId, textureId, entity -> {
             if (entity.hasPreviewAnimation()) {
                 entity.clearPreviewAnimation();
@@ -219,7 +219,7 @@ public final class RenderUtil {
         });
     }
 
-    private static void renderModel(double pPosX, double pPosY, float pScale, LocalPlayer player, ResourceLocation modelId, ResourceLocation textureId, GeoReplacedEntityRenderer renderer, CustomPlayerEntity entity) {
+    private static void renderModel(double pPosX, double pPosY, float pScale, Player player, ResourceLocation modelId, ResourceLocation textureId, GeoReplacedEntityRenderer renderer, CustomPlayerEntity entity) {
         entity.setMainModel(ModelIdUtil.getMainId(modelId));
         entity.setTexture(textureId);
 
@@ -299,7 +299,7 @@ public final class RenderUtil {
         Lighting.setupFor3DItems();
     }
 
-    public static void renderPlayerEntity(LocalPlayer player, double posX, double posY, float scale, float yawOffset, int z) {
+    public static void renderPlayerEntity(Player player, double posX, double posY, float scale, float yawOffset, int z) {
         PoseStack viewStack = RenderSystem.getModelViewStack();
         viewStack.pushPose();
         viewStack.translate(posX + scale * 0.5, posY + scale * 2, z);

@@ -20,13 +20,13 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.fml.ModList;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public class PlayerModelScreen extends Screen {
+    protected final Player player;
     private Map<ResourceLocation, List<ResourceLocation>> models = Maps.newHashMap();
     private List<ResourceLocation> modelOrderList;
     private int maxPage;
@@ -48,6 +49,13 @@ public class PlayerModelScreen extends Screen {
     public PlayerModelScreen() {
         super(Component.literal("YSM Player Model GUI"));
         this.category = Category.ALL;
+        this.player = Minecraft.getInstance().player;
+    }
+
+    public PlayerModelScreen(Player player) {
+        super(Component.literal("YSM Player Model GUI"));
+        this.category = Category.ALL;
+        this.player = player;
     }
 
     private void calculateModelList() {
@@ -56,26 +64,22 @@ public class PlayerModelScreen extends Screen {
             this.models.putAll(ClientModelManager.MODELS);
         }
         if (this.category == Category.AUTH) {
-            if (minecraft != null && minecraft.player != null) {
-                minecraft.player.getCapability(AuthModelsCapabilityProvider.AUTH_MODELS_CAP).ifPresent(cap -> {
-                    for (ResourceLocation modelId : ClientModelManager.MODELS.keySet()) {
-                        if (cap.containModel(modelId) || !ClientModelManager.AUTH_MODELS.contains(modelId.getPath())) {
-                            this.models.put(modelId, ClientModelManager.MODELS.get(modelId));
-                        }
+            this.player.getCapability(AuthModelsCapabilityProvider.AUTH_MODELS_CAP).ifPresent(cap -> {
+                for (ResourceLocation modelId : ClientModelManager.MODELS.keySet()) {
+                    if (cap.containModel(modelId) || !ClientModelManager.AUTH_MODELS.contains(modelId.getPath())) {
+                        this.models.put(modelId, ClientModelManager.MODELS.get(modelId));
                     }
-                });
-            }
+                }
+            });
         }
         if (this.category == Category.STAR) {
-            if (minecraft != null && minecraft.player != null) {
-                minecraft.player.getCapability(StarModelsCapabilityProvider.STAR_MODELS_CAP).ifPresent(cap -> {
-                    for (ResourceLocation modelId : ClientModelManager.MODELS.keySet()) {
-                        if (cap.containModel(modelId)) {
-                            this.models.put(modelId, ClientModelManager.MODELS.get(modelId));
-                        }
+            this.player.getCapability(StarModelsCapabilityProvider.STAR_MODELS_CAP).ifPresent(cap -> {
+                for (ResourceLocation modelId : ClientModelManager.MODELS.keySet()) {
+                    if (cap.containModel(modelId)) {
+                        this.models.put(modelId, ClientModelManager.MODELS.get(modelId));
                     }
-                });
-            }
+                }
+            });
         }
 
         if (textField != null) {
@@ -111,15 +115,12 @@ public class PlayerModelScreen extends Screen {
 
         addRenderableWidget(new TextureCountButton(x + 5, y + 5));
         addRenderableWidget(new FlatIconButton(x + 28, y + 5, 79, 20, 32, 16, (b) -> {
-            if (Minecraft.getInstance().player != null) {
-                LocalPlayer player = Minecraft.getInstance().player;
-                player.getCapability(ModelInfoCapabilityProvider.MODEL_INFO_CAP).ifPresent(cap -> {
-                    List<ResourceLocation> textures = ClientModelManager.MODELS.get(cap.getModelId());
-                    if (textures != null) {
-                        Minecraft.getInstance().setScreen(new PlayerTextureScreen(this, cap.getModelId(), textures));
-                    }
-                });
-            }
+            player.getCapability(ModelInfoCapabilityProvider.MODEL_INFO_CAP).ifPresent(cap -> {
+                List<ResourceLocation> textures = ClientModelManager.MODELS.get(cap.getModelId());
+                if (textures != null) {
+                    Minecraft.getInstance().setScreen(new PlayerTextureScreen(this, cap.getModelId(), textures));
+                }
+            });
         }).setTooltips("gui.yes_steve_model.model.texture"));
         addRenderableWidget(new StarButton(x + 110, y + 5));
 
@@ -180,15 +181,13 @@ public class PlayerModelScreen extends Screen {
             ResourceLocation id = modelOrderList.get(modelIndex);
             int xStart = x + 143 + 55 * (i % 5);
             int yStart = y + 28 + 93 * (i / 5);
-            if (minecraft != null && minecraft.player != null) {
-                minecraft.player.getCapability(AuthModelsCapabilityProvider.AUTH_MODELS_CAP).ifPresent(cap -> {
-                    if (ClientModelManager.AUTH_MODELS.contains(id.getPath()) && !cap.containModel(id)) {
-                        addRenderableWidget(new ModelButton(xStart, yStart, true, Pair.of(id, models.get(id)), ClientModelManager.EXTRA_INFO.get(ModelIdUtil.getMainId(id))));
-                    } else {
-                        addRenderableWidget(new ModelButton(xStart, yStart, false, Pair.of(id, models.get(id)), ClientModelManager.EXTRA_INFO.get(ModelIdUtil.getMainId(id))));
-                    }
-                });
-            }
+            player.getCapability(AuthModelsCapabilityProvider.AUTH_MODELS_CAP).ifPresent(cap -> {
+                if (ClientModelManager.AUTH_MODELS.contains(id.getPath()) && !cap.containModel(id)) {
+                    addRenderableWidget(new ModelButton(xStart, yStart, true, Pair.of(id, models.get(id)), ClientModelManager.EXTRA_INFO.get(ModelIdUtil.getMainId(id)), player));
+                } else {
+                    addRenderableWidget(new ModelButton(xStart, yStart, false, Pair.of(id, models.get(id)), ClientModelManager.EXTRA_INFO.get(ModelIdUtil.getMainId(id)), player));
+                }
+            });
         }
     }
 
@@ -203,29 +202,27 @@ public class PlayerModelScreen extends Screen {
         graphics.fillGradient(x + 351, y + 7, x + 352, y + 21, 0xFF_F3EFE0, 0xFF_F3EFE0);
 
         textField.render(graphics, mouseX, mouseY, partialTicks);
-        LocalPlayer player = Minecraft.getInstance().player;
-        if (player != null) {
-            Window window = Minecraft.getInstance().getWindow();
-            double scale = window.getGuiScale();
-            int scissorX = (int) ((this.x + 5) * scale);
-            int scissorY = (int) (window.getHeight() - ((this.y + 200) * scale));
-            int scissorW = (int) (125 * scale);
-            int scissorH = (int) (171 * scale);
-            RenderSystem.enableScissor(scissorX, scissorY, scissorW, scissorH);
-            InventoryScreen.renderEntityInInventoryFollowsMouse(graphics, x + 67, y + 190, 70, x + 67 - mouseX, y + 180 - 95 - mouseY, player);
-            RenderSystem.disableScissor();
 
-            player.getCapability(ModelInfoCapabilityProvider.MODEL_INFO_CAP).ifPresent(cap -> {
-                String modelName = cap.getModelId().getPath();
-                List<FormattedCharSequence> modelNameSplit = font.split(FormattedText.of(modelName), 125);
-                int lineY = y + 205;
-                for (FormattedCharSequence line : modelNameSplit) {
-                    int nameWidth = font.width(line);
-                    graphics.drawString(font, line, x + (135 - nameWidth) / 2, lineY, 0xF3EFE0);
-                    lineY += 10;
-                }
-            });
-        }
+        Window window = Minecraft.getInstance().getWindow();
+        double scale = window.getGuiScale();
+        int scissorX = (int) ((this.x + 5) * scale);
+        int scissorY = (int) (window.getHeight() - ((this.y + 200) * scale));
+        int scissorW = (int) (125 * scale);
+        int scissorH = (int) (171 * scale);
+        RenderSystem.enableScissor(scissorX, scissorY, scissorW, scissorH);
+        InventoryScreen.renderEntityInInventoryFollowsMouse(graphics, x + 67, y + 190, 70, x + 67 - mouseX, y + 180 - 95 - mouseY, player);
+        RenderSystem.disableScissor();
+
+        player.getCapability(ModelInfoCapabilityProvider.MODEL_INFO_CAP).ifPresent(cap -> {
+            String modelName = cap.getModelId().getPath();
+            List<FormattedCharSequence> modelNameSplit = font.split(FormattedText.of(modelName), 125);
+            int lineY = y + 205;
+            for (FormattedCharSequence line : modelNameSplit) {
+                int nameWidth = font.width(line);
+                graphics.drawString(font, line, x + (135 - nameWidth) / 2, lineY, 0xF3EFE0);
+                lineY += 10;
+            }
+        });
 
         if (textField.getValue().isEmpty() && !textField.isFocused()) {
             graphics.drawString(font, Component.translatable("gui.yes_steve_model.search").withStyle(ChatFormatting.ITALIC), x + 148, y + 10, 0x777777);
@@ -238,10 +235,8 @@ public class PlayerModelScreen extends Screen {
         graphics.drawString(font, debugInfo, x + 2, y + 226, ChatFormatting.DARK_GRAY.getColor());
 
         super.render(graphics, mouseX, mouseY, partialTicks);
-        this.renderables.stream().filter(r -> r instanceof FlatIconButton)
-                .forEach(r -> ((FlatIconButton) r).renderToolTip(graphics, this, mouseX, mouseY));
-        this.renderables.stream().filter(r -> r instanceof ModelButton)
-                .forEach(r -> ((ModelButton) r).renderComponentTooltip(graphics, this, mouseX, mouseY));
+        this.renderables.stream().filter(r -> r instanceof FlatIconButton).forEach(r -> ((FlatIconButton) r).renderToolTip(graphics, this, mouseX, mouseY));
+        this.renderables.stream().filter(r -> r instanceof ModelButton).forEach(r -> ((ModelButton) r).renderComponentTooltip(graphics, this, mouseX, mouseY));
     }
 
     @Override

@@ -3,12 +3,12 @@ package com.elfmcys.yesstevemodel.client.gui.button;
 import com.elfmcys.yesstevemodel.capability.ModelInfoCapabilityProvider;
 import com.elfmcys.yesstevemodel.network.NetworkHandler;
 import com.elfmcys.yesstevemodel.network.message.SetModelAndTexture;
+import com.elfmcys.yesstevemodel.network.message.SetNpcModelAndTexture;
 import com.elfmcys.yesstevemodel.util.Keep;
 import com.elfmcys.yesstevemodel.util.ModelIdUtil;
 import com.elfmcys.yesstevemodel.util.RenderUtil;
 import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -17,6 +17,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.world.entity.player.Player;
 
 import java.util.List;
 
@@ -24,24 +25,28 @@ public class TextureButton extends Button {
     private final ResourceLocation modelId;
     private final ResourceLocation textureId;
     private final String name;
+    private final Player player;
 
-    public TextureButton(int pX, int pY, ResourceLocation modelId, ResourceLocation textureId) {
+    public TextureButton(int pX, int pY, ResourceLocation modelId, ResourceLocation textureId, Player player) {
         super(pX, pY, 54, 102, Component.empty(), (b) -> {
         }, DEFAULT_NARRATION);
         this.modelId = modelId;
         this.textureId = textureId;
         this.name = ModelIdUtil.getSubNameFromId(textureId);
+        this.player = player;
     }
 
     @Override
     @Keep
     public void onPress() {
-        LocalPlayer player = Minecraft.getInstance().player;
-        if (player != null) {
-            player.getCapability(ModelInfoCapabilityProvider.MODEL_INFO_CAP).ifPresent(cap ->
-                    cap.setModelAndTexture(modelId, textureId));
+        player.getCapability(ModelInfoCapabilityProvider.MODEL_INFO_CAP).ifPresent(cap ->
+                cap.setModelAndTexture(modelId, textureId));
+        LocalPlayer localPlayer = Minecraft.getInstance().player;
+        if (player.equals(localPlayer)) {
+            NetworkHandler.CHANNEL.sendToServer(new SetModelAndTexture(modelId, textureId));
+        } else {
+            NetworkHandler.CHANNEL.sendToServer(new SetNpcModelAndTexture(modelId, textureId, player.getId()));
         }
-        NetworkHandler.CHANNEL.sendToServer(new SetModelAndTexture(modelId, textureId));
     }
 
     @Override

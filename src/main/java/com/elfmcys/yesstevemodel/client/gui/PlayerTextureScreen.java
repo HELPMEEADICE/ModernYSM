@@ -14,12 +14,12 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.player.Player;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +37,7 @@ public class PlayerTextureScreen extends Screen {
     private final ResourceLocation modelId;
     private final List<ResourceLocation> textures;
     private final List<String> animations;
+    private final Player player;
     private String animation = "";
     private int maxTexturePage;
     private int texturePage;
@@ -61,6 +62,7 @@ public class PlayerTextureScreen extends Screen {
         this.textures.sort(ResourceLocation::compareTo);
         this.animations = new ArrayList<>(ClientModelManager.DEFAULT_ANIMATION_FILE.animations().keySet().stream().toList());
         this.animations.sort(String::compareTo);
+        this.player = parent.player;
     }
 
     @Override
@@ -143,18 +145,13 @@ public class PlayerTextureScreen extends Screen {
             }
             int xStart = x + 306 + 56 * (i % 2);
             int yStart = y + 5 + 104 * (i / 2);
-            addRenderableWidget(new TextureButton(xStart, yStart, modelId, textures.get(modelIndex)));
+            addRenderableWidget(new TextureButton(xStart, yStart, modelId, textures.get(modelIndex), player));
         }
     }
 
     @Override
     @Keep
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        LocalPlayer player = getMinecraft().player;
-        if (player == null) {
-            return;
-        }
-
         renderBackground(graphics);
         graphics.fillGradient(x, y + 22, x + 90, y + 235, 0xff_222222, 0xff_222222);
         graphics.fillGradient(x + 93, y, x + 299, y + 235, 0xff_222222, 0xff_222222);
@@ -168,7 +165,7 @@ public class PlayerTextureScreen extends Screen {
             int scissorW = (int) (206 * guiScale);
             int scissorH = (int) (235 * guiScale);
             RenderSystem.enableScissor(scissorX, scissorY, scissorW, scissorH);
-            RenderUtil.renderTextureScreenEntity(this.x + 299 / 2.0F + 40 + posX, this.y + 235 / 2.0F + 80 + posY, scale, pitch, yaw, getMinecraft().player, modelId, cap.getSelectTexture(), showGround, entity -> {
+            RenderUtil.renderTextureScreenEntity(this.x + 299 / 2.0F + 40 + posX, this.y + 235 / 2.0F + 80 + posY, scale, pitch, yaw, player, modelId, cap.getSelectTexture(), showGround, entity -> {
                 if (!entity.hasPreviewAnimation(animation)) {
                     entity.setPreviewAnimation(animation);
                 }
