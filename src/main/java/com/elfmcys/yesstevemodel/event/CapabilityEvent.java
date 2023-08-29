@@ -7,6 +7,7 @@ import com.elfmcys.yesstevemodel.network.NetworkHandler;
 import com.elfmcys.yesstevemodel.network.message.SyncAuthModels;
 import com.elfmcys.yesstevemodel.network.message.SyncModelInfo;
 import com.elfmcys.yesstevemodel.network.message.SyncStarModels;
+import net.minecraft.network.protocol.Packet;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -19,6 +20,7 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.LogicalSide;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.network.NetworkDirection;
 
 @Mod.EventBusSubscriber(modid = YesSteveModel.MOD_ID)
 public final class CapabilityEvent {
@@ -108,10 +110,8 @@ public final class CapabilityEvent {
             getModelInfoCap(player).ifPresent(cap -> {
                 if (cap.isDirty()) {
                     SyncModelInfo syncMsg = new SyncModelInfo(player.getId(), cap);
-                    if (player.getServer() == null) {
-                        return;
-                    }
-                    player.getServer().getPlayerList().getPlayers().forEach(p -> NetworkHandler.sendToClientPlayer(syncMsg, p));
+                    Packet<?> packet = NetworkHandler.CHANNEL.toVanillaPacket(syncMsg, NetworkDirection.PLAY_TO_CLIENT);
+                    ((ServerPlayer) player).serverLevel().getChunkSource().broadcastAndSend(player, packet);
                     cap.setDirty(false);
                 }
             });
