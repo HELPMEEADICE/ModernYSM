@@ -2,8 +2,9 @@ package com.elfmcys.yesstevemodel.client.gui.button;
 
 import com.elfmcys.yesstevemodel.capability.ModelInfoCapabilityProvider;
 import com.elfmcys.yesstevemodel.network.NetworkHandler;
+import com.elfmcys.yesstevemodel.bukkit.message.OpenModelGuiMessage;
 import com.elfmcys.yesstevemodel.network.message.SetModelAndTexture;
-import com.elfmcys.yesstevemodel.network.message.SetNpcModelAndTexture;
+import com.elfmcys.yesstevemodel.bukkit.message.SetNpcModelAndTexture;
 import com.elfmcys.yesstevemodel.util.Keep;
 import com.elfmcys.yesstevemodel.util.ModelIdUtil;
 import com.elfmcys.yesstevemodel.util.RenderUtil;
@@ -45,7 +46,7 @@ public class TextureButton extends Button {
         if (player.equals(localPlayer)) {
             NetworkHandler.CHANNEL.sendToServer(new SetModelAndTexture(modelId, textureId));
         } else {
-            NetworkHandler.CHANNEL.sendToServer(new SetNpcModelAndTexture(modelId, textureId, player.getId()));
+            NetworkHandler.CHANNEL.sendToServer(new SetNpcModelAndTexture(modelId, textureId, OpenModelGuiMessage.CURRENT_NPC_ID));
         }
     }
 

@@ -1,5 +1,6 @@
 package com.elfmcys.yesstevemodel.client.renderer;
 
+import com.elfmcys.yesstevemodel.bukkit.client.NPCData;
 import com.elfmcys.yesstevemodel.capability.ModelInfoCapabilityProvider;
 import com.elfmcys.yesstevemodel.client.entity.CustomPlayerEntity;
 import com.elfmcys.yesstevemodel.client.model.CustomPlayerModel;
@@ -13,6 +14,7 @@ import com.elfmcys.yesstevemodel.util.Keep;
 import com.elfmcys.yesstevemodel.util.ModelIdUtil;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import it.unimi.dsi.fastutil.Pair;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -45,8 +47,14 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<CustomPlayer
         if (this.animatable != null && entity instanceof Player player) {
             player.getCapability(ModelInfoCapabilityProvider.MODEL_INFO_CAP).ifPresent(cap -> {
                 this.animatable.setPlayer(player);
-                this.animatable.setMainModel(ModelIdUtil.getMainId(cap.getModelId()));
-                this.animatable.setTexture(cap.getSelectTexture());
+                if (NPCData.contains(player.getUUID())) {
+                    Pair<ResourceLocation, ResourceLocation> data = NPCData.getData(player.getUUID());
+                    this.animatable.setMainModel(ModelIdUtil.getMainId(data.left()));
+                    this.animatable.setTexture(data.right());
+                } else {
+                    this.animatable.setMainModel(ModelIdUtil.getMainId(cap.getModelId()));
+                    this.animatable.setTexture(cap.getSelectTexture());
+                }
             });
             if (MinecraftForge.EVENT_BUS.post(new SpecialPlayerRenderEvent(player, this.animatable, ModelIdUtil.getModelIdFromMainId(this.animatable.getMainModel())))) {
                 return;

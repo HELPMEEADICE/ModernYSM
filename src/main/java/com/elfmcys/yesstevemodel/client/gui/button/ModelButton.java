@@ -4,8 +4,9 @@ import com.elfmcys.yesstevemodel.YesSteveModel;
 import com.elfmcys.yesstevemodel.capability.ModelInfoCapabilityProvider;
 import com.elfmcys.yesstevemodel.capability.StarModelsCapabilityProvider;
 import com.elfmcys.yesstevemodel.network.NetworkHandler;
+import com.elfmcys.yesstevemodel.bukkit.message.OpenModelGuiMessage;
 import com.elfmcys.yesstevemodel.network.message.SetModelAndTexture;
-import com.elfmcys.yesstevemodel.network.message.SetNpcModelAndTexture;
+import com.elfmcys.yesstevemodel.bukkit.message.SetNpcModelAndTexture;
 import com.elfmcys.yesstevemodel.util.Keep;
 import com.elfmcys.yesstevemodel.util.RenderUtil;
 import com.mojang.blaze3d.platform.Window;
@@ -54,7 +55,7 @@ public class ModelButton extends Button {
         if (player.equals(localPlayer)) {
             NetworkHandler.CHANNEL.sendToServer(new SetModelAndTexture(modelInfo.getLeft(), modelInfo.getRight().get(0)));
         } else {
-            NetworkHandler.CHANNEL.sendToServer(new SetNpcModelAndTexture(modelInfo.getLeft(), modelInfo.getRight().get(0), player.getId()));
+            NetworkHandler.CHANNEL.sendToServer(new SetNpcModelAndTexture(modelInfo.getLeft(), modelInfo.getRight().get(0), OpenModelGuiMessage.CURRENT_NPC_ID));
         }
     }
 
