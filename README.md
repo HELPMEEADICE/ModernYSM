@@ -1,48 +1,48 @@
-# LegacyYSM 1.1.5 旧版 YSM 源码仓库
+<div align="center">
+  <img src="images/banner.png" alt="logo"/>
+  <h2>OpenYSM</h2>
+  <p>YSM 开源替代品，基于LgeacyYSM</p>
 
-![Minecraft](https://img.shields.io/badge/Minecraft-Java%20Edition-brightgreen)
-![License](https://img.shields.io/badge/License-BSD-blue)
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"/></a>
+    <a href="https://t.me/NoSteveModel"><img src="https://img.shields.io/badge/Telegram-@NoSteveModel-26A5E4?logo=telegram&logoColor=white" alt="Telegram"/></a>
+  </p>
+</div>
 
 ## 说明
 
-本仓库包含了 YesSteveModel (YSM) 1.1.5 hotfix2（2023年8月）及以下版本的完整源代码及 git 记录。
+OpenYSM 是一款基于 [Yes Steve Model](https://modrinth.com/mod/yes-steve-model) 的模组，它修改了原版玩家模型，其核心使用 [GeckoLib](https://github.com/bernie-g/geckolib) 库，并采用了 Minecraft 基岩版的模型和动画文件。这使得玩家可以根据自己的喜好自定义玩家模型和动画。
 
-包含 1.16.5/1.18.2/1.19.2/1.20.1 Forge 版本的全部源码。
+本项目基于LgeacyYSM，目标是提供一个完全开源、可自由修改和分发的替代品。 
+本项目使用可选的C++库实现更快速的渲染，项目位于[OpenYSMDev/openysm.cpp](https://github.com/OpenYSMDev/openysm.cpp)
 
-## 为什么开源？
+## 构建
 
-我们决定将旧版 YSM 源码开源，主要基于以下几个原因：
+```bash
+git clone https://github.com/OpenYSMDev/ModernYSM.git
+cd ModernYSM
+./gradlew build
+```
 
-### 1. 新版本的完全重置
-新版 YSM 已经经过完全重新设计和开发，采用了全新的架构和加密方式。
+构建产物位于 `build/<platform>/libs/` 目录下。
 
-旧版 YSM (1.1.5及以下) 对新版本没有任何技术影响，两者在代码层面已经完全独立。
+## 贡献
 
-### 2. 旧版加密的现状
-此前社区已经出现了大量破解 YSM 1.1.5 及以下版本加密的工具和方法，旧版的加密机制实际上已经失去了保护作用。
-
-同时，目前社区中的大部分新模型都已经采用了新版的加密方式，旧版加密已经毫无实际意义。
-
-### 3. 支持开放的游戏氛围
-我们注意到社区中有不少开发者制作了去除加密功能的 YSM 版本，这表明了社区对开放性的需求。
-
-YSM 开发组一直非常支持开放、自由的游戏开发氛围，我们希望通过开源旧版源码，为其他开发者的二次开发和学习提供便利。
+欢迎任何形式的贡献，包括但不限于提交 Issue、改进文档、修复 Bug、新增功能。
 
 ## 开源协议
 
 ### 源代码协议
-本项目的源代码采用 **BSD 3-Clause License** 开放，您可以自由地使用、修改和分发代码，仅需要保留原始的版权声明。
+
+本项目的源代码采用 MIT License 开放，您可以自由地使用、修改和分发代码，仅需要保留原始的版权声明。
 
 详细的许可证条款请参见 [LICENSE](LICENSE) 文件。
 
 ### 模型资源协议
+
 仓库中自带的模型文件采用不同的协议：
 
-- **默认模型**: 采用 **CC0 (Creative Commons Zero)** 协议，完全开放，无任何使用限制
-- **酒狐 (Wine Fox) 模型**: 采用 **CC BY-NC-SA 4.0** 协议，允许非商业使用，需要署名，并且衍生作品需要采用相同协议
+- 默认模型: 采用 CC0 (Creative Commons Zero) 协议，完全开放，无任何使用限制
+- 酒狐 (Wine Fox) 模型: 采用 CC BY-NC-SA 4.0 协议，允许非商业使用，需要署名，并且衍生作品需要采用相同协议
 
 请在使用相应模型时严格遵守对应的协议要求。
-
-## 使用建议
-
-我们鼓励开发者基于此源码进行二次开发，创造出更加开放、易用的模型加载工具。
