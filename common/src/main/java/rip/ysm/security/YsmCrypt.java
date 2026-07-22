@@ -215,7 +215,7 @@ public class YsmCrypt {
         try (YSMByteBuf buf = new YSMByteBuf(Unpooled.wrappedBuffer(serverData))) {
             int headerStart = buf.getRawBuf().readerIndex();
             if (buf.readVarInt() != 1) throw new RuntimeException("Invalid YSM cache format");
-            int i1 = buf.readVarInt();
+            int i1 = buf.readVarInt(); // 2
             int i2 = buf.readVarInt();
             int i3 = buf.readVarInt();
             int i4 = buf.readVarInt(); // format
@@ -458,13 +458,16 @@ public class YsmCrypt {
         }
     }
 
-    public static byte[] read(byte[] cacheFileData, byte[] clientKey) throws Exception {
+    public record CachePayload(byte[] data, int formatVersion) {
+    }
+
+    public static CachePayload read(byte[] cacheFileData, byte[] clientKey) throws Exception { // 1
         try (YSMByteBuf buf = new YSMByteBuf(Unpooled.wrappedBuffer(cacheFileData))) {
             buf.readVarInt();
             buf.readVarInt();
             buf.readVarInt();
             buf.readVarInt();
-            buf.readVarInt();
+            int format = buf.readVarInt();
             buf.readVarInt();
             buf.readVarInt();
             buf.readVarInt();
@@ -485,7 +488,7 @@ public class YsmCrypt {
             int n = ((plainText[0] & 0xFF) | ((plainText[1] & 0xFF) << 8)) & 0x3FF;
             int zstdOffset = 2 + n;
 
-            return YsmZstd.decompress(plainText, zstdOffset, plainText.length - zstdOffset);
+            return new CachePayload(YsmZstd.decompress(plainText, zstdOffset, plainText.length - zstdOffset), format);
         }
     }
 }

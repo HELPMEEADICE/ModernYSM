@@ -94,9 +94,7 @@ void main() {
             vec3 view_v1 = (combinedMatrix * vec4(getLocalPos(quadBase + 1u), 1.0)).xyz;
             vec3 view_v2 = (combinedMatrix * vec4(getLocalPos(quadBase + 2u), 1.0)).xyz;
 
-            vec3 geometricNormal = cross(view_v1 - view_v0, view_v2 - view_v0);
-
-            if (dot(view_v0, geometricNormal) >= 0.0) {
+            if (determinant(mat3(view_v0, view_v1, view_v2)) >= 0.0) {
                 outPos = vec3(2.0, 2.0, 2.0);
                 outNormal = vec3(0.0, 0.0, 1.0);
             }

@@ -291,6 +291,7 @@ public class NativeModelRenderer {
                 vertexConsumer,
                 matrixTransferArray,
                 boneVertex,
+                stateBuffer,
                 renderPartMask,
                 packedLight, packedOverlay,
                 r, g, b, a

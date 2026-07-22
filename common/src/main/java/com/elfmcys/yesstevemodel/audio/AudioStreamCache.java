@@ -1,7 +1,7 @@
 package com.elfmcys.yesstevemodel.audio;
 
-import com.elfmcys.yesstevemodel.ResourceCleanupHelper;
 import com.elfmcys.yesstevemodel.client.model.ModelAssembly;
+import com.elfmcys.yesstevemodel.util.ResourceCleanupHelper;
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import net.minecraft.client.Minecraft;

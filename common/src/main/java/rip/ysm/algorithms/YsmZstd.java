@@ -1,11 +1,7 @@
 package rip.ysm.algorithms;
 
-import com.elfmcys.yesstevemodel.NativeLibLoader;
-import com.ysm.parser.YSMNative;
-import org.apache.commons.io.FileUtils;
 import rip.ysm.zstd.ZstdUtil;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -16,11 +12,6 @@ public class YsmZstd {
     }
 
     public static byte[] decompress(byte[] rawData, int offset, int length) throws IOException {
-/*
-        if(NativeLibLoader.isLoaded())
-            return YSMNative.ysmZstdDecompress(rawData);
-*/
-
         YsmZstd.washInPlace(rawData, offset, length);
         return ZstdUtil.decompress(rawData, offset, length);
     }
@@ -30,8 +21,6 @@ public class YsmZstd {
     }
 
     public static byte[] compress(byte[] rawData, int offset, int length) {
-    /*    if(NativeLibLoader.isLoaded())
-            return YSMNative.ysmZstdCompress(rawData,3);*/
         byte[] zstdData = ZstdUtil.compress(rawData, offset, length, 3);
         return YsmZstd.obfuscate(zstdData);
     }

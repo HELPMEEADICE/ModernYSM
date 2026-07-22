@@ -14,11 +14,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 public final class FileTypeUtil {
-
-    public static final String DEFAULT_MODEL_ID = "default";
-
-    public static final String DEFAULT_TEXTURE = "default";
-
     private static final Set<String> ARCHIVE_EXTENSIONS = Sets.newHashSet(".zip", ".7z", ".ysm");
 
     public static int parseHexId(String str) {

@@ -45,11 +45,13 @@ import org.jetbrains.annotations.Nullable;
 import rip.ysm.legacy.YesModelUtils;
 import rip.ysm.security.YSMByteBuf;
 import rip.ysm.security.YsmCrypt;
+import rip.ysm.security.YsmCrypt.CachePayload;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -456,13 +458,11 @@ public final class ServerModelManager {
             Set<String> validCacheFiles = new HashSet<>();
 
             packs.clear();
-            scanDirectoryPacks(BUILT);
-            scanDirectoryPacks(CUSTOM);
-            scanDirectoryPacks(AUTH);
 
-            scanDirectoryModels(BUILT, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false);
-            scanDirectoryModels(CUSTOM, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false);
-            scanDirectoryModels(AUTH, CACHE_SERVER, loadedModels, authIds, validCacheFiles, true);
+            scanSource(BUILT, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false);
+            scanSource(CUSTOM, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false);
+            scanSource(AUTH, CACHE_SERVER, loadedModels, authIds, validCacheFiles, true);
+
             try (Stream<Path> stream = Files.list(CACHE_SERVER)) {
                 stream.forEach(file -> {
                     if (!validCacheFiles.contains(file.getFileName().toString())) {
@@ -482,20 +482,70 @@ public final class ServerModelManager {
         }
     }
 
-    private static void scanDirectoryModels(Path baseDir, Path cacheDir, Map<String, ServerModelData> loaded, Set<String> authIds, Set<String> validCaches, boolean isAuth) {
+    private static void scanSource(Path baseDir, Path cacheDir, Map<String, ServerModelData> loaded, Set<String> authIds, Set<String> validCaches, boolean isAuth) {
         if (baseDir == null || !Files.isDirectory(baseDir)) return;
 
+        scanDirectoryPacks(baseDir, "");
+        scanDirectoryModels(baseDir, "", cacheDir, loaded, authIds, validCaches, isAuth);
+
+
+        try (Stream<Path> stream = Files.walk(baseDir)) {
+            stream.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".zip"))
+                    .forEach(zipFile -> {
+                        String zipName = zipFile.getFileName().toString();
+                        String zipBaseName = zipName.substring(0, zipName.length() - 4);
+
+                        Path parent = zipFile.getParent();
+                        String prefix = parent != null ? baseDir.relativize(parent).toString().replace('\\', '/') : "";
+                        if (!prefix.isEmpty() && !prefix.endsWith("/")) prefix += "/";
+
+                        try {
+                            URI uri = URI.create("jar:" + zipFile.toUri());
+                            try (FileSystem fs = FileSystems.newFileSystem(uri, Collections.emptyMap())) {
+                                Path root = fs.getPath("/");
+                                if (YSMFolderDeserializer.isModelFolder(root)) {
+                                    String modelId = prefix + zipBaseName;
+                                    try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(root)) {
+                                        RawYsmModel rawModel = deserializer.deserialize();
+                                        if (rawModel != null) {
+                                            ServerModelData data = processAndCacheModel(modelId, rawModel, cacheDir, isAuth, validCaches);
+                                            if (data != null) {
+                                                loaded.put(modelId, data);
+                                                if (isAuth) authIds.add(modelId);
+                                            }
+                                        }
+                                    } catch (Exception e) {
+                                        YesSteveModel.LOGGER.error("Failed to load model in zip: " + zipFile, e);
+                                    }
+                                } else {
+                                    scanDirectoryPacks(root, prefix);
+                                    scanDirectoryModels(root, prefix, cacheDir, loaded, authIds, validCaches, isAuth);
+                                }
+                            }
+                        } catch (Exception e) {
+                            YesSteveModel.LOGGER.error("Failed to scan zip model source: " + zipFile, e);
+                        }
+                    });
+        } catch (IOException e) {
+            YesSteveModel.LOGGER.error("Failed to collect zip files from: " + baseDir, e);
+        }
+    }
+
+    private static void scanDirectoryModels(Path searchRoot, String prefix, Path cacheDir, Map<String, ServerModelData> loaded, Set<String> authIds, Set<String> validCaches, boolean isAuth) {
+        if (searchRoot == null || !Files.isDirectory(searchRoot)) return;
+
         try {
-            Files.walkFileTree(baseDir, new SimpleFileVisitor<>() {
+            Files.walkFileTree(searchRoot, new SimpleFileVisitor<>() {
                 @Override
                 public @NotNull FileVisitResult preVisitDirectory(@NotNull Path dir, @NotNull BasicFileAttributes attrs) {
-                    if (dir.equals(baseDir)) {
+                    if (dir.equals(searchRoot)) {
                         return FileVisitResult.CONTINUE;
                     }
 
                     try {
                         if (YSMFolderDeserializer.isModelFolder(dir)) {
-                            String modelId = baseDir.relativize(dir).toString().replace('\\', '/');
+                            String modelId = prefix + searchRoot.relativize(dir).toString().replace('\\', '/');
 
                             RawYsmModel rawModel = null;
                             try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(dir)) {
@@ -507,7 +557,6 @@ public final class ServerModelManager {
                             if (rawModel != null) {
                                 try {
                                     ServerModelData data = processAndCacheModel(modelId, rawModel, cacheDir, isAuth, validCaches);
-                                    rawModel = null;
                                     if (data != null) {
                                         loaded.put(modelId, data);
                                         if (isAuth) authIds.add(modelId);
@@ -531,7 +580,7 @@ public final class ServerModelManager {
                     if (!file.getFileName().toString().endsWith(".ysm")) return FileVisitResult.CONTINUE;
 
                     try {
-                        String modelId = baseDir.relativize(file).toString().replace('\\', '/');
+                        String modelId = prefix + searchRoot.relativize(file).toString().replace('\\', '/');
                         byte[] raw = Files.readAllBytes(file);
                         int ysmCryptoVersion = YesModelUtils.getYsmCryptoVersion(raw);
                         if (ysmCryptoVersion == -1) throw new IllegalStateException("Unknown YSM crypto version for file: " + file);
@@ -562,20 +611,21 @@ public final class ServerModelManager {
                 }
             });
         } catch (IOException e) {
-            YesSteveModel.LOGGER.error("Failed to walk directory tree: " + baseDir, e);
+            YesSteveModel.LOGGER.error("Failed to walk directory tree: " + searchRoot, e);
         }
     }
 
-    private static void scanDirectoryPacks(Path baseDir) {
-        if (baseDir == null || !Files.isDirectory(baseDir)) return;
-        try (var stream = Files.walk(baseDir, 1)) {
+    private static void scanDirectoryPacks(Path searchRoot, String prefix) {
+        if (searchRoot == null || !Files.isDirectory(searchRoot)) return;
+        try (var stream = Files.walk(searchRoot, 1)) {
             stream.filter(Files::isDirectory).forEach(path -> {
-                if (path.equals(baseDir)) return;
+                if (path.equals(searchRoot)) return;
                 Path packJson = path.resolve("ysm-pack.json");
                 if (Files.exists(packJson)) {
                     try {
                         ServerPackData packData = new ServerPackData();
-                        packData.folderPath = baseDir.toFile().toURI().relativize(path.toFile().toURI()).getPath();
+                        String rel = searchRoot.relativize(path).toString().replace('\\', '/');
+                        packData.folderPath = prefix + rel + (rel.endsWith("/") ? "" : "/");
 
                         String jsonStr = Files.readString(packJson, StandardCharsets.UTF_8);
                         JsonObject json = JsonParser.parseString(jsonStr).getAsJsonObject();
@@ -612,7 +662,7 @@ public final class ServerModelManager {
                 }
             });
         } catch (Exception e) {
-            YesSteveModel.LOGGER.error("Failed to walk directory for packs: " + baseDir, e);
+            YesSteveModel.LOGGER.error("Failed to walk directory for packs: " + searchRoot, e);
         }
     }
 
@@ -679,8 +729,8 @@ public final class ServerModelManager {
         ServerAnimationInfo animInfo = new ServerAnimationInfo(animMap, texArr);
 
         // Sub Entities
-        Object[] projectiles = raw.projectiles.values().stream().map(v -> v.matchIds != null ? v.matchIds : new String[]{v.identifier}).toArray();
-        Object[] vehicles = raw.vehicles.values().stream().map(v -> v.matchIds != null ? v.matchIds : new String[]{v.identifier}).toArray();
+        Object[] projectiles = raw.projectiles.stream().map(v -> v.matchIds != null ? v.matchIds : new String[0]).toArray();
+        Object[] vehicles = raw.vehicles.stream().map(v -> v.matchIds != null ? v.matchIds : new String[0]).toArray();
         return new ServerModelData(modelId, animInfo, projectiles, vehicles, serverModelInfo, isCustomSkinModel, isAuth);
     }
 
@@ -892,18 +942,18 @@ public final class ServerModelManager {
                 }
 
                 byte[] cacheData = Files.readAllBytes(cacheFile);
-                byte[] clearText = YsmCrypt.read(cacheData, serverKey);
+                CachePayload cachePayload = YsmCrypt.read(cacheData, serverKey);
 
                 int coreDataLength;
-                try (YSMBinaryDeserializer deserializer = new YSMBinaryDeserializer(clearText, 32)) {
+                try (YSMBinaryDeserializer deserializer = new YSMBinaryDeserializer(cachePayload.data(), cachePayload.formatVersion())) {
                     deserializer.deserializeKeepOpen();
                     coreDataLength = deserializer.getReader().getOffset();
                 }
 
                 try (YSMByteBuf outBuf = new YSMByteBuf(Unpooled.buffer())) {
-                    outBuf.writeDword(32);
-                    outBuf.getRawBuf().writeBytes(clearText, 0, coreDataLength);
-                    outBuf.writeVarInt(32); // version
+                    outBuf.writeDword(cachePayload.formatVersion());
+                    outBuf.getRawBuf().writeBytes(cachePayload.data(), 0, coreDataLength);
+                    outBuf.writeVarInt(cachePayload.formatVersion()); // version
                     outBuf.writeVarInt(1);
                     byte[] randBytes = new byte[8];
                     theRandom.nextBytes(randBytes);
@@ -1144,6 +1194,10 @@ public final class ServerModelManager {
                 });
             });
         }
+    }
+
+    public static Map<String, ServerPackData> getPacks() {
+        return packs;
     }
 
     private static class PendingTransfer {

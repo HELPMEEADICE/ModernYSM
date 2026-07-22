@@ -1,8 +1,8 @@
 package com.elfmcys.yesstevemodel.client.upload;
 
-import com.elfmcys.yesstevemodel.ResourceCleanupHelper;
 import com.elfmcys.yesstevemodel.YesSteveModel;
 import com.elfmcys.yesstevemodel.client.texture.ITextureMap;
+import com.elfmcys.yesstevemodel.util.ResourceCleanupHelper;
 import com.google.common.collect.Queues;
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.Pair;

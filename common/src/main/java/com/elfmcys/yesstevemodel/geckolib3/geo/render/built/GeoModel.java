@@ -1,8 +1,10 @@
 package com.elfmcys.yesstevemodel.geckolib3.geo.render.built;
 
+import com.elfmcys.yesstevemodel.YesSteveModel;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.util.StringPool;
 import com.elfmcys.yesstevemodel.geckolib3.geo.animated.AnimatedGeoModel;
 import com.elfmcys.yesstevemodel.resource.models.GeometryDescription;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 import it.unimi.dsi.fastutil.ints.IntLists;
@@ -11,11 +13,18 @@ import it.unimi.dsi.fastutil.objects.ObjectLists;
 import org.jetbrains.annotations.NotNull;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.tree.AnnotationNode;
+import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.MethodNode;
 import rip.ysm.gpu.GpuRenderPath;
 
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.List;
+import java.util.function.BiFunction;
 
 /**
  * Bedrock的.geo模型文件
@@ -109,6 +118,7 @@ public class GeoModel {
         public Vector3f[] positions = new Vector3f[4];
         public Vector2f[] uvs = new Vector2f[4];
         public Vector3f normal;
+        public boolean isTranslucent;
     }
 
 //    static {
@@ -119,15 +129,110 @@ public class GeoModel {
 
     public long gpuMeshHandle = 0;
 
+    public static void initSIMD() {
+        try {
+            String bufferName = null;
+            String verticesName = null;
+            String nextElementByteName = null;
+            String ensureCapacityName = null;
+            String modeName = null;
+
+
+            String classPath = "/com/elfmcys/yesstevemodel/mixin/client/BufferBuilderMixin.class";
+            InputStream is = GeoModel.class.getResourceAsStream(classPath);
+
+            if (is == null) {
+                YesSteveModel.LOGGER.error("[YSM] Could not find Mixin class resource!");
+                return;
+            }
+
+            ClassReader classReader = new ClassReader(is); //客户端环境没法加载mixin类，只能这样了
+            ClassNode classNode = new ClassNode();
+            classReader.accept(classNode, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+            is.close();
+
+
+            String targetAnnotationDesc = "Lrip/ysm/annotations/BufferBuilderMapping;";
+
+            BiFunction<List<AnnotationNode>, String, String> getAnnotationValue = (annotations, targetDesc) -> {
+                if (annotations == null) return null;
+                for (AnnotationNode ann : annotations) {
+                    if (targetDesc.equals(ann.desc) && ann.values != null) {
+                        for (int i = 0; i < ann.values.size(); i += 2) {
+                            if ("value".equals(ann.values.get(i))) {
+                                return (String) ann.values.get(i + 1);
+                            }
+                        }
+                    }
+                }
+                return null;
+            };
+
+
+            BiFunction<List<AnnotationNode>, List<AnnotationNode>, String> extractMappingId = (visibleAnns, invisibleAnns) -> {
+                String id = getAnnotationValue.apply(visibleAnns, targetAnnotationDesc);
+                return id != null ? id : getAnnotationValue.apply(invisibleAnns, targetAnnotationDesc);
+            };
+
+            for (FieldNode field : classNode.fields) {
+                String id = extractMappingId.apply(field.visibleAnnotations, field.invisibleAnnotations);
+                if (id != null) {
+                    switch (id) {
+                        case "buffer_builder_buffer": bufferName = field.name; break;
+                        case "buffer_builder_vertices": verticesName = field.name; break;
+                        case "buffer_builder_nextElementByte": nextElementByteName = field.name; break;
+                        case "buffer_builder_mode": modeName = field.name; break;
+                    }
+                }
+            }
+
+            for (MethodNode method : classNode.methods) {
+                String id = extractMappingId.apply(method.visibleAnnotations, method.invisibleAnnotations);
+                if ("buffer_builder_ensureCapacity".equals(id)) {
+                    ensureCapacityName = method.name;
+                }
+            }
+
+            YesSteveModel.LOGGER.info("[YSM] Dynamic Mapping Loaded: buffer={}, vertices={}, nextElementByte={}, mode={}, ensureCapacity={}",
+                    bufferName, verticesName, nextElementByteName, modeName, ensureCapacityName);
+
+            nInitSIMD(
+                    BufferBuilder.class,
+                    bufferName,
+                    verticesName,
+                    nextElementByteName,
+                    ensureCapacityName,
+                    modeName
+            );
+        } catch (Throwable ex) {
+            YesSteveModel.LOGGER.error("[YSM] Failed to initialize SIMD mappings, fast vertex building will not work.", ex);
+        }
+    }
+
+    private static native void nInitSIMD(
+            Class<?> bufferBuilderClass,
+            String bufferName,
+            String verticesName,
+            String nextElementByteName,
+            String ensureCapacityName,
+            String modeName
+    );
+
     public static native long nInitModelCache(ByteBuffer buffer);
 
     public static native void nDestroyModelCache(long handle);
 
     public static native void nComputeModelVertices(
-            long handle, Object vertexConsumer,
-            float[] matrixTransfer, float[] animTransfer,
-            int renderPartMask, int packedLight, int packedOverlay,
-            float r, float g, float b, float a);
+            long handle,
+            Object vertexConsumer,
+            float[] matrixArray,
+            float[] animArray,
+            float[] stateArray,
+            int renderPartMask,
+            int packedLight,
+            int packedOverlay,
+            float r, float g, float b, float a
+    );
 
     public static native long nBuildGpuMesh(ByteBuffer buffer, int[] outMeta);
 
@@ -157,7 +262,7 @@ public class GeoModel {
             }
         }
 
-        int initBufferSize = 4 + (totalBones * 25) + (totalCubes * 5) + (totalQuads * 92);
+        int initBufferSize = 4 + (totalBones * 25) + (totalCubes * 5) + (totalQuads * 93);
         ByteBuffer buffer = ByteBuffer.allocateDirect(initBufferSize).order(ByteOrder.nativeOrder());
 
         buffer.putInt(bakedBones.size());
@@ -174,6 +279,7 @@ public class GeoModel {
                 buffer.put((byte) (cube.cullable ? 1 : 0));
                 buffer.putInt(cube.quads.size());
                 for (BakedQuad quad : cube.quads) {
+                    buffer.put((byte) (quad.isTranslucent ? 1 : 0)); //是否含半透明
                     for (int v = 0; v < 4; v++) {
                         buffer.putFloat(quad.positions[v].x());
                         buffer.putFloat(quad.positions[v].y());

@@ -34,7 +34,6 @@ public class YSMFolderDeserializer implements AutoCloseable {
     private final Map<String, String> readFilesMd5Map = new TreeMap<>();
     private String finalFolderHash;
     private final Path rootPath;
-    private final FileSystem zipFileSystem;
     private final RawYsmModel model;
 
     private final Map<String, byte[]> inMemoryFiles;
@@ -44,19 +43,12 @@ public class YSMFolderDeserializer implements AutoCloseable {
             throw new FileNotFoundException("Model source not found: " + sourcePath);
         }
 
-        this.inMemoryFiles = null;
-
-        if (Files.isDirectory(sourcePath)) {
-            this.rootPath = sourcePath;
-            this.zipFileSystem = null;
-        } else if (sourcePath.toString().endsWith(".zip") || sourcePath.toString().endsWith(".ysm")) {
-            URI uri = URI.create("jar:" + sourcePath.toUri());
-            this.zipFileSystem = FileSystems.newFileSystem(uri, Collections.emptyMap());
-            this.rootPath = this.zipFileSystem.getPath("/");
-        } else {
-            throw new IllegalArgumentException("Unsupported file type. Expected directory or .zip");
+        if (!Files.isDirectory(sourcePath)) {
+            throw new IllegalArgumentException("Expected model directory: " + sourcePath);
         }
 
+        this.inMemoryFiles = null;
+        this.rootPath = sourcePath;
         this.model = new RawYsmModel();
         this.model.formatVersion = 65535;
     }
@@ -64,7 +56,6 @@ public class YSMFolderDeserializer implements AutoCloseable {
     public YSMFolderDeserializer(Map<String, byte[]> memoryFiles) {
         this.inMemoryFiles = memoryFiles;
         this.rootPath = null;
-        this.zipFileSystem = null;
         this.model = new RawYsmModel();
         this.model.formatVersion = 65535;
     }
@@ -117,9 +108,6 @@ public class YSMFolderDeserializer implements AutoCloseable {
 
     @Override
     public void close() throws IOException {
-        if (this.zipFileSystem != null) {
-            this.zipFileSystem.close();
-        }
         if (inMemoryFiles != null) inMemoryFiles.clear();
     }
 
@@ -129,8 +117,8 @@ public class YSMFolderDeserializer implements AutoCloseable {
         if (ysmJson.has("files")) {
             JsonObject files = ysmJson.getAsJsonObject("files");
             if (files.has("player")) parseMainEntity(files.getAsJsonObject("player"));
-            if (files.has("vehicles")) parseSubEntities(files.get("vehicles"), model.vehicles, "vehicle");
-            if (files.has("projectiles")) parseSubEntities(files.get("projectiles"), model.projectiles, "projectile");
+            if (files.has("vehicles")) parseSubEntities(files.get("vehicles"), model.vehicles);
+            if (files.has("projectiles")) parseSubEntities(files.get("projectiles"), model.projectiles);
         }
     }
 
@@ -380,91 +368,137 @@ public class YSMFolderDeserializer implements AutoCloseable {
         }
     }
 
-    private void parseSubEntities(JsonElement sectionElem, Map<String, RawYsmModel.RawSubEntity> targetMap, String defaultIdentifier) {
+    private void parseSubEntities(JsonElement sectionElem, List<RawYsmModel.RawSubEntity> targetList) {
         if (!sectionElem.isJsonArray() && !sectionElem.isJsonObject()) return;
-        List<JsonObject> items = new ArrayList<>();
 
-        if (sectionElem.isJsonArray()) {
-            for (JsonElement e : sectionElem.getAsJsonArray()) {
-                if (e.isJsonObject()) items.add(e.getAsJsonObject());
-            }
-        } else {
+        int index = 0;
+        if (sectionElem.isJsonObject()) {
             JsonObject mapObj = sectionElem.getAsJsonObject();
             for (Map.Entry<String, JsonElement> entry : mapObj.entrySet()) {
                 if (entry.getValue().isJsonObject()) {
                     JsonObject item = entry.getValue().getAsJsonObject();
-                    if (!item.has("match")) item.addProperty("__temp_identifier", entry.getKey());
-                    items.add(item);
+                    RawYsmModel.RawSubEntity sub = parseSubEntityItem(item, index++);
+                    sub.matchIds = new String[]{entry.getKey()};
+                    targetList.add(sub);
+                }
+            }
+        } else if (sectionElem.isJsonArray()) {
+            for (JsonElement e : sectionElem.getAsJsonArray()) {
+                if (e.isJsonObject()) {
+                    JsonObject item = e.getAsJsonObject();
+                    RawYsmModel.RawSubEntity sub = parseSubEntityItem(item, index++);
+
+                    if (item.has("match")) {
+                        JsonElement match = item.get("match");
+                        if (match.isJsonArray()) {
+                            JsonArray mArr = match.getAsJsonArray();
+                            sub.matchIds = new String[mArr.size()];
+                            for (int i = 0; i < mArr.size(); i++) sub.matchIds[i] = mArr.get(i).getAsString();
+                        } else if (match.isJsonPrimitive()) {
+                            sub.matchIds = new String[]{match.getAsString()};
+                        }
+                    } else {
+                        sub.matchIds = new String[0];
+                    }
+                    targetList.add(sub);
                 }
             }
         }
+    }
 
-        int index = 0;
-        for (JsonObject item : items) {
-            RawYsmModel.RawSubEntity sub = new RawYsmModel.RawSubEntity();
-            sub.identifier = item.has("__temp_identifier") ? item.get("__temp_identifier").getAsString() : (defaultIdentifier + "_" + index);
+    private RawYsmModel.RawSubEntity parseSubEntityItem(JsonObject item, int index) {
+        RawYsmModel.RawSubEntity sub = new RawYsmModel.RawSubEntity();
 
-            if (item.has("match")) {
-                JsonElement match = item.get("match");
-                if (match.isJsonArray()) {
-                    JsonArray mArr = match.getAsJsonArray();
-                    sub.matchIds = new String[mArr.size()];
-                    for (int i = 0; i < mArr.size(); i++) sub.matchIds[i] = mArr.get(i).getAsString();
-                } else if (match.isJsonPrimitive()) {
-                    sub.matchIds = new String[]{match.getAsString()};
-                }
+        if (item.has("model")) {
+            byte[] geoData = readResource(item.get("model").getAsString());
+            if (geoData != null) sub.model = parseGeometry(geoData, 3);
+        }
+
+        if (item.has("texture")) {
+            JsonElement texElem = item.get("texture");
+            String texPath = null;
+
+            if (texElem.isJsonPrimitive()) {
+                texPath = texElem.getAsString();
+            } else if (texElem.isJsonObject() && texElem.getAsJsonObject().has("uv")) {
+                texPath = texElem.getAsJsonObject().get("uv").getAsString();
             }
 
-            if (item.has("model")) {
-                byte[] geoData = readResource(item.get("model").getAsString());
-                if (geoData != null) sub.model = parseGeometry(geoData, 3);
-            }
-
-            if (item.has("texture")) {
-                String texPath = item.get("texture").isJsonObject() ? item.getAsJsonObject("texture").get("uv").getAsString() : item.get("texture").getAsString();
+            if (texPath != null) {
                 byte[] texData = readResource(texPath);
                 if (texData != null) {
                     ImageMeta meta = parseImageMeta(texData, texPath);
                     RawYsmModel.RawTexture rt = new RawYsmModel.RawTexture();
-
                     rt.hash = sha256Hex(texData);
                     rt.width = meta.width();
                     rt.height = meta.height();
                     rt.imageFormat = meta.format();
-
                     rt.name = "base_texture_" + index;
                     rt.data = texData;
                     rt.unknownFlag = 1;
+
+                    // specular与normal texture
+                    if (texElem.isJsonObject()) {
+                        JsonObject obj = texElem.getAsJsonObject();
+                        if (obj.has("specular")) {
+                            byte[] spData = readResource(obj.get("specular").getAsString());
+                            if (spData != null) {
+                                ImageMeta spMeta = parseImageMeta(spData, "specular");
+                                RawYsmModel.RawTexture.SubTexture subTex = new RawYsmModel.RawTexture.SubTexture();
+                                subTex.specularType = 2; // 2为specular
+                                subTex.data = spData;
+                                subTex.unknownFlag = 1;
+                                subTex.hash = sha256Hex(spData);
+                                subTex.width = spMeta.width();
+                                subTex.height = spMeta.height();
+                                subTex.imageFormat = spMeta.format();
+                                rt.subTextures.add(subTex);
+                            }
+                        }
+                        if (obj.has("normal")) {
+                            byte[] nrData = readResource(obj.get("normal").getAsString());
+                            if (nrData != null) {
+                                ImageMeta nrMeta = parseImageMeta(nrData, "normal");
+                                RawYsmModel.RawTexture.SubTexture subTex = new RawYsmModel.RawTexture.SubTexture();
+                                subTex.specularType = 1; // 1为normal
+                                subTex.data = nrData;
+                                subTex.unknownFlag = 1;
+                                subTex.hash = sha256Hex(nrData);
+                                subTex.width = nrMeta.width();
+                                subTex.height = nrMeta.height();
+                                subTex.imageFormat = nrMeta.format();
+                                rt.subTextures.add(subTex);
+                            }
+                        }
+                    }
                     sub.textures.put(rt.name, rt);
                 }
             }
-
-            if (item.has("animation")) {
-                byte[] animData = readResource(item.get("animation").getAsString());
-                if (animData != null) {
-                    RawYsmModel.RawAnimationFile raf = parseAnimations(animData);
-                    raf.fileHash = sha256Hex(animData);
-                    raf.animType = getAnimTypeFromKey("extra");
-                    sub.animationFiles.put("sub_anim", raf);
-                }
-            }
-
-            if (item.has("controller")) {
-                String acPath = item.get("controller").getAsString();
-                byte[] acData = readResource(acPath);
-                if (acData != null) {
-                    String acHash = sha256Hex(acData);
-                    RawYsmModel.RawAnimationControllerFile acFile = new RawYsmModel.RawAnimationControllerFile();
-                    acFile.name = extractFileName(acPath);
-                    acFile.hash = acHash;
-                    parseAnimationControllers(acData, acFile.controllers);
-                    sub.animationControllerFiles.add(acFile);
-                }
-            }
-
-            targetMap.put(sub.identifier, sub);
-            index++;
         }
+
+        if (item.has("animation")) {
+            byte[] animData = readResource(item.get("animation").getAsString());
+            if (animData != null) {
+                RawYsmModel.RawAnimationFile raf = parseAnimations(animData);
+                raf.fileHash = sha256Hex(animData);
+                raf.animType = getAnimTypeFromKey("extra");
+                sub.animationFiles.put("sub_anim", raf);
+            }
+        }
+
+        if (item.has("controller")) {
+            String acPath = item.get("controller").getAsString();
+            byte[] acData = readResource(acPath);
+            if (acData != null) {
+                String acHash = sha256Hex(acData);
+                RawYsmModel.RawAnimationControllerFile acFile = new RawYsmModel.RawAnimationControllerFile();
+                acFile.name = extractFileName(acPath);
+                acFile.hash = acHash;
+                parseAnimationControllers(acData, acFile.controllers);
+                sub.animationControllerFiles.add(acFile);
+            }
+        }
+        return sub;
     }
 
     private RawYsmModel.RawGeometry parseGeometry(byte[] data, int modelType) {
@@ -1168,7 +1202,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
         // 箭矢
         if (arrowData != null) {
             RawYsmModel.RawSubEntity arrowSub = new RawYsmModel.RawSubEntity();
-            arrowSub.identifier = "arrow";
+            arrowSub.matchIds = new String[]{"minecraft:arrow"};
             arrowSub.model = parseGeometry(arrowData, 3);
 
             byte[] arrowTexData = readResource("arrow.png");
@@ -1193,7 +1227,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
                 arrowSub.animationFiles.put("sub_anim", raf);
             }
 
-            model.projectiles.put("arrow", arrowSub);
+            model.projectiles.add(arrowSub);
         }
     }
 

@@ -59,8 +59,8 @@ public class YSMBinarySerializer {
         if (format < 26) {
             throw new UnsupportedOperationException();
         } else {
-            writeSubEntities(buf, model.vehicles, format, "Vehicle");
-            writeSubEntities(buf, model.projectiles, format, "Projectile");
+            writeSubEntities(buf, model.vehicles, format);
+            writeSubEntities(buf, model.projectiles, format);
         }
         buf.writeVarInt(1); // unknown
 
@@ -91,10 +91,14 @@ public class YSMBinarySerializer {
         writeYsmJson(buf, model, format);
     }
 
-    private static void writeSubEntities(YSMByteBuf buf, Map<String, RawYsmModel.RawSubEntity> entities, int format, String category) {
+    private static void writeSubEntities(YSMByteBuf buf, List<RawYsmModel.RawSubEntity> entities, int format) {
         buf.writeVarInt(entities.size());
-        int index = 0;
-        for (RawYsmModel.RawSubEntity sub : entities.values()) {
+        for (RawYsmModel.RawSubEntity sub : entities) {
+
+            if (format <= 26) {
+                buf.writeString(sub.matchIds != null && sub.matchIds.length > 0 ? sub.matchIds[0] : "unknown");
+            }
+
             buf.writeVarInt(sub.animationFiles.size());
             for (RawYsmModel.RawAnimationFile animFile : sub.animationFiles.values()) {
                 buf.writeString(animFile.fileHash != null ? animFile.fileHash : "");
@@ -139,11 +143,9 @@ public class YSMBinarySerializer {
                         buf.writeString(matchId != null ? matchId : "");
                     }
                 } else {
-                    buf.writeVarInt(1); 
-                    buf.writeString(sub.identifier != null ? sub.identifier : "");
+                    buf.writeVarInt(0);
                 }
             }
-            index++;
         }
     }
 

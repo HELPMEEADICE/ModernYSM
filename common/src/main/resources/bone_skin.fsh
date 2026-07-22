@@ -26,7 +26,7 @@ vec4 linearFog(vec4 inColor, float vd, float fs, float fe, vec4 fc) {
 }
 
 void main() {
-    if (u_alphaMode != 2 && v_cullable > 0.5 && !gl_FrontFacing) {
+    if (v_cullable > 0.5 && !gl_FrontFacing) {
         discard;
     }
 

@@ -38,7 +38,7 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             int width = imageIn.getWidth();
             int height = imageIn.getHeight();
             TextureUtil.prepareImage(this.getId(), 0, width, height);
-            imageIn.upload(0, 0, 0, 0, 0, width, height, false, false, false, true);
+            imageIn.upload(0, 0, 0, 0, 0, width, height, false, true, false, true);
         } catch (IOException e) {
             e.printStackTrace();
         }

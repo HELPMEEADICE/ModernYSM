@@ -5,8 +5,6 @@ import com.elfmcys.yesstevemodel.config.ModSoundEvents;
 import com.elfmcys.yesstevemodel.config.ServerConfig;
 import com.elfmcys.yesstevemodel.event.YsmEventBootstrap;
 import com.elfmcys.yesstevemodel.util.obfuscate.Keep;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import dev.architectury.platform.Platform;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -28,12 +26,8 @@ import java.io.IOException;
  * 其它模型统统都是进入世界后加载
  */
 public class YesSteveModel {
-
     public static final String MOD_ID = "yes_steve_model";
-
     public static final Logger LOGGER = LogManager.getLogger(MOD_ID);
-
-    public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
 
     private YesSteveModel() {
     }
@@ -53,7 +47,6 @@ public class YesSteveModel {
         YsmEventBootstrap.register();
     }
 
-    @SuppressWarnings({"deprecation", "removal"})
     private static void initConfig() {
         File oldConfig = Platform.getConfigFolder().resolve("yes_steve_model-common.toml").toFile();
         if (oldConfig.isFile()) {

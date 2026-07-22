@@ -12,6 +12,7 @@ import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraftforge.fml.ModList;
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
+import rip.ysm.compat.oculus.ShadersTextureType;
 
 import java.util.function.LongSupplier;
 

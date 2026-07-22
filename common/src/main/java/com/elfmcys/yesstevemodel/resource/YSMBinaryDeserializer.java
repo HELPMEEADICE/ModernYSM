@@ -37,10 +37,8 @@ public class YSMBinaryDeserializer implements AutoCloseable{
             deserializeModern();
         }
 
-        model.projectiles.entrySet().removeIf(entry -> { // 老版本格式可能有动画没模型没纹理
-            RawYsmModel.RawSubEntity sub = entry.getValue();
-            return sub.model == null || sub.textures.isEmpty();
-        });
+        // 老版本格式可能有动画没模型没纹理
+        model.projectiles.removeIf(sub -> sub.model == null || sub.textures.isEmpty());
 
         int offset = reader.getOffset(); // 关闭前获取偏移量
         if (closeOnExit) {
@@ -113,11 +111,7 @@ public class YSMBinaryDeserializer implements AutoCloseable{
 
             String animKey = YSMFolderDeserializer.getAnimKeyFromType(animationId);
             if (animationId == 5) {
-                RawYsmModel.RawSubEntity arrowEntity = model.projectiles.computeIfAbsent("minecraft:arrow", k -> {
-                    RawYsmModel.RawSubEntity newSub = new RawYsmModel.RawSubEntity();
-                    newSub.identifier = k;
-                    return newSub;
-                });
+                RawYsmModel.RawSubEntity arrowEntity = getOrCreateArrowEntity();
                 arrowEntity.animationFiles.put(animKey, rawAnimationFile);
             } else {
                 model.mainEntity.animationFiles.put(animKey, rawAnimationFile);
@@ -143,7 +137,7 @@ public class YSMBinaryDeserializer implements AutoCloseable{
 
 
             if ("arrow.png".equals(tex.name))
-                model.projectiles.get("minecraft:arrow").textures.put(tex.name, tex);
+                getOrCreateArrowEntity().textures.put(tex.name, tex);
             else
                 model.mainEntity.textures.put(tex.name, tex);
 
@@ -206,11 +200,7 @@ public class YSMBinaryDeserializer implements AutoCloseable{
 
             String animKey = YSMFolderDeserializer.getAnimKeyFromType(animationId);
             if (animationId == 5) {
-                RawYsmModel.RawSubEntity arrowEntity = model.projectiles.computeIfAbsent("minecraft:arrow", k -> {
-                    RawYsmModel.RawSubEntity newSub = new RawYsmModel.RawSubEntity();
-                    newSub.identifier = k;
-                    return newSub;
-                });
+                RawYsmModel.RawSubEntity arrowEntity = getOrCreateArrowEntity();
                 arrowEntity.animationFiles.put(animKey, rawAnimationFile);
             } else {
                 model.mainEntity.animationFiles.put(animKey, rawAnimationFile);
@@ -257,7 +247,7 @@ public class YSMBinaryDeserializer implements AutoCloseable{
 
             // 特殊處理一下
             if ("/ARROW\\".equals(tex.name))
-                model.projectiles.get("minecraft:arrow").textures.put(tex.name, tex);
+                getOrCreateArrowEntity().textures.put(tex.name, tex);
             else
                 model.mainEntity.textures.put(tex.name, tex);
 
@@ -331,7 +321,7 @@ public class YSMBinaryDeserializer implements AutoCloseable{
                 }
             }
         }
-        for (RawYsmModel.RawSubEntity value : model.projectiles.values()) {
+        for (RawYsmModel.RawSubEntity value : model.projectiles) {
             for (RawYsmModel.RawTexture rawTexture : value.textures.values()) {
                 model.mainEntity.textures.remove(rawTexture.name);
             }
@@ -358,15 +348,15 @@ public class YSMBinaryDeserializer implements AutoCloseable{
         if (format < 26) {
             int subEntityTotalCount = reader.readVarInt();
             for (int i = 0; i < subEntityTotalCount; ++i) {
-                parseSubEntity(model.vehicles, "SubEntity", i);
+                parseSubEntity(model.vehicles, i);
             }
             int footerFlag = reader.readVarInt(); // always 00
         } else {
             int vehiclesTotalCount = reader.readVarInt();
-            for (int i = 0; i < vehiclesTotalCount; ++i) parseSubEntity(model.vehicles, "Vehicle", i);
+            for (int i = 0; i < vehiclesTotalCount; ++i) parseSubEntity(model.vehicles, i);
 
             int projectilesTotalCount = reader.readVarInt();
-            for (int i = 0; i < projectilesTotalCount; ++i) parseSubEntity(model.projectiles, "Projectile", i);
+            for (int i = 0; i < projectilesTotalCount; ++i) parseSubEntity(model.projectiles, i);
         }
 
         int unknownEntityFlag = reader.readVarInt();
@@ -386,7 +376,7 @@ public class YSMBinaryDeserializer implements AutoCloseable{
             animRef.fileHash = hash;
         }
 
-        parseAnimationControllers(model.mainEntity.animationControllerFiles,true);
+        parseAnimationControllers(model.mainEntity.animationControllerFiles, true);
 
         parseTextureFiles(model.mainEntity.textures);
 
@@ -400,30 +390,26 @@ public class YSMBinaryDeserializer implements AutoCloseable{
             geoRef.sha256 = hash;
             geoRef.modelType = modelType;
             tempMainModels.add(geoRef);
-            System.out.println("Model Table Entry: ID=" + modelType + ", Hash=" + hash);
+//            System.out.println("Model Table Entry: ID=" + modelType + ", Hash=" + hash);
         }
         assignMainModels(tempMainModels);
 
         parseYSMJson();
     }
 
-    private void parseSubEntity(Map<String, RawYsmModel.RawSubEntity> targetMap, String categoryName, int index) {
+    private void parseSubEntity(List<RawYsmModel.RawSubEntity> targetList, int index) {
         RawYsmModel.RawSubEntity subEntity = new RawYsmModel.RawSubEntity();
-        String subModuleName = "";
+        String legacySubModuleName = "";
+
         if (format <= 26) {
-            subModuleName = reader.readString();
-            subEntity.identifier = subModuleName;
-        } else {
-            subEntity.identifier = categoryName + "_" + index; // >=26沒有Header Name
+            legacySubModuleName = reader.readString();
         }
+
         int animationCount = reader.readVarInt();
         for (int i = 0; i < animationCount; ++i) {
             String hash = reader.readString();
             RawYsmModel.RawAnimationFile rawAnimationFile = parseAnimations();
-            subEntity.animationFiles.put(
-                    categoryName,
-                    rawAnimationFile
-            );
+            subEntity.animationFiles.put("sub_anim", rawAnimationFile);
             rawAnimationFile.fileHash = hash;
         }
 
@@ -461,18 +447,16 @@ public class YSMBinaryDeserializer implements AutoCloseable{
 
 
         if (format > 26) {
-            int matchIdSize = reader.readVarInt(); 
+            int matchIdSize = reader.readVarInt();
             subEntity.matchIds = new String[matchIdSize];
             for (int j = 0; j < matchIdSize; j++) {
                 subEntity.matchIds[j] = reader.readString();
             }
-
-            if (matchIdSize > 0) {
-                subEntity.identifier = subEntity.matchIds[0];
-            }
+        } else {
+            subEntity.matchIds = new String[]{legacySubModuleName.isEmpty() ? "unknown" : legacySubModuleName};
         }
 
-        targetMap.put(subEntity.identifier, subEntity);
+        targetList.add(subEntity);
     }
 
     private RawYsmModel.RawGeometry parseModels() {
@@ -967,15 +951,25 @@ public class YSMBinaryDeserializer implements AutoCloseable{
                     model.mainEntity.armModel = tempMainModel;
                     break;
                 case 3:
-                    RawYsmModel.RawSubEntity subEntity = new RawYsmModel.RawSubEntity();
+                    RawYsmModel.RawSubEntity subEntity = getOrCreateArrowEntity();
                     subEntity.model = tempMainModel;
-                    subEntity.identifier = "minecraft:arrow";
-                    model.projectiles.put(subEntity.identifier, subEntity);
                     break;
                 default:
                     throw new RuntimeException("Unknown model type: " + tempMainModel.modelType);
             }
         }
+    }
+
+    private RawYsmModel.RawSubEntity getOrCreateArrowEntity() {
+        for (RawYsmModel.RawSubEntity sub : model.projectiles) {
+            if (sub.matchIds != null && sub.matchIds.length > 0 && "minecraft:arrow".equals(sub.matchIds[0])) {
+                return sub;
+            }
+        }
+        RawYsmModel.RawSubEntity newSub = new RawYsmModel.RawSubEntity();
+        newSub.matchIds = new String[]{"minecraft:arrow"};
+        model.projectiles.add(newSub);
+        return newSub;
     }
 
     @Override

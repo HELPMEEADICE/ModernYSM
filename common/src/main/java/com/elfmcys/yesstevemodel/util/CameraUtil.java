@@ -1,13 +1,13 @@
 package com.elfmcys.yesstevemodel.util;
 
-import rip.ysm.compat.oculus.OculusCompat;
+import com.elfmcys.yesstevemodel.client.entity.IPreviewAnimatable;
 import com.elfmcys.yesstevemodel.client.renderer.ModelPreviewRenderer;
 import com.elfmcys.yesstevemodel.geckolib3.core.AnimatableEntity;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.context.IContext;
-import com.elfmcys.yesstevemodel.client.entity.IPreviewAnimatable;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
+import rip.ysm.compat.oculus.OculusCompat;
 
 public final class CameraUtil {
     public static int getCameraType(IContext<? extends Entity> IContext) {
@@ -18,8 +18,10 @@ public final class CameraUtil {
     }
 
     public static boolean isFirstPerson(AnimatableEntity<? extends Entity> animatableEntity) {
-        return animatableEntity.getEntity() == Minecraft.getInstance().player
-                && ModelPreviewRenderer.isFirstPerson() && !OculusCompat.isPBRActive() && Minecraft.getInstance().options.getCameraType().ordinal() == CameraType.FIRST_PERSON.ordinal();
+        if (animatableEntity.getEntity() == Minecraft.getInstance().player && ModelPreviewRenderer.isFirstPerson()) {
+            OculusCompat.isPBRActive();
+        }
+        return false;
     }
 
     public static boolean isThirdPerson(IContext<? extends Entity> IContext) {

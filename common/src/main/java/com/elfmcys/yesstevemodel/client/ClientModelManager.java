@@ -10,7 +10,9 @@ import com.elfmcys.yesstevemodel.client.model.VehicleModelBundle;
 import com.elfmcys.yesstevemodel.client.texture.OuterFileTexture;
 import com.elfmcys.yesstevemodel.client.upload.IResourceLocatable;
 import com.elfmcys.yesstevemodel.client.upload.UploadManager;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.elfmcys.yesstevemodel.model.ServerModelManager;
+import com.elfmcys.yesstevemodel.model.format.ServerModelData;
 import com.elfmcys.yesstevemodel.network.NetworkHandler;
 import com.elfmcys.yesstevemodel.network.message.C2SModelSyncPayload;
 import com.elfmcys.yesstevemodel.resource.YSMBinaryDeserializer;
@@ -39,6 +41,7 @@ import org.jetbrains.annotations.Nullable;
 import rip.ysm.security.YSMByteBuf;
 import rip.ysm.security.YSMClientCache;
 import rip.ysm.security.YsmCrypt;
+import rip.ysm.security.YsmCrypt.CachePayload;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -116,6 +119,9 @@ public class ClientModelManager {
 
     public static void loadDefaultModel() {
         YesSteveModel.LOGGER.info("[YSM] Loading builtin default model...");
+
+        GeoModel.initSIMD();
+
         try {
             String resourcePath = "/assets/yes_steve_model/builtin/default";
             URL resourceUrl = YesSteveModel.class.getResource(resourcePath);
@@ -148,8 +154,60 @@ public class ClientModelManager {
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[YSM] Failed to dispatch Default Model", e);
             }
+
+            preloadLocalModelsAndPacks();
+
         } catch (Exception e) {
             YesSteveModel.LOGGER.error("[YSM] Failed to load builtin default model", e);
+        }
+    }
+
+    private static void preloadLocalModelsAndPacks() {
+        YesSteveModel.LOGGER.info("[YSM] Preloading local models and packs into client memory...");
+
+        Map<String, ServerModelManager.ServerPackData> localPacks = ServerModelManager.getPacks();
+        if (!localPacks.isEmpty()) {
+            List<ModelPackData> parsedPacks = new ArrayList<>();
+            for (ServerModelManager.ServerPackData packData : localPacks.values()) {
+                OuterFileTexture iconTexture = null;
+                if (packData.iconData != null) {
+                    try {
+                        byte[] png = YSMClientMapper.toPng(packData.iconData, packData.iconFormat, packData.iconWidth, packData.iconHeight);
+                        iconTexture = new OuterFileTexture(png);
+                    } catch (Exception e) {
+                        YesSteveModel.LOGGER.error("[YSM] Failed to parse local pack icon: " + packData.folderPath, e);
+                    }
+                }
+                parsedPacks.add(new ModelPackData(packData.folderPath, packData.name, packData.description, iconTexture, packData.lang));
+            }
+            onModelPacksReceived(parsedPacks.toArray(new ModelPackData[0]));
+        }
+
+        Map<String, ServerModelData> serverModelInfo = ServerModelManager.getServerModelInfo();
+        if (serverModelInfo != null && !serverModelInfo.isEmpty()) {
+            for (Map.Entry<String, ServerModelData> entry : serverModelInfo.entrySet()) {
+                String modelId = entry.getKey();
+                if ("default".equals(modelId)) continue;
+
+                ServerModelData modelData = entry.getValue();
+                boolean isAuth = modelData.isAuth();
+
+                try {
+                    String sha256 = modelData.getLoadedModelData().getModelHash();
+                    long[] hashes = YsmCrypt.calculateModelHashes(sha256, ServerModelManager.serverKey);
+                    String cacheFileName = String.format("%016x%016x", hashes[0], hashes[1]);
+                    Path cacheFile = ServerModelManager.CACHE_SERVER.resolve(cacheFileName);
+
+                    if (Files.exists(cacheFile)) {
+                        byte[] fileData = Files.readAllBytes(cacheFile);
+                        CachePayload cachePayload = YsmCrypt.read(fileData, ServerModelManager.serverKey);
+
+                        parseAndLoadModel(cachePayload, modelId, isAuth);
+                    }
+                } catch (Exception e) {
+                    YesSteveModel.LOGGER.error("[YSM] Failed to preload local cache for model: " + modelId, e);
+                }
+            }
         }
     }
 
@@ -280,8 +338,8 @@ public class ClientModelManager {
                         if (clientKey == null) return;
                         try {
                             byte[] fileBytes = Files.readAllBytes(cachedFile.toPath());
-                            byte[] decompressed = YsmCrypt.read(fileBytes, clientKey);
-                            parseAndLoadModel(decompressed, modelId, isAuth);
+                            CachePayload cachePayload = YsmCrypt.read(fileBytes, clientKey);
+                            parseAndLoadModel(cachePayload, modelId, isAuth);
                         } catch (Exception e) {
                             YesSteveModel.LOGGER.error("[YSM] Failed to parse and load cached model: " + modelId, e);
                         }
@@ -444,9 +502,9 @@ public class ClientModelManager {
                     }
 
                     YesSteveModel.LOGGER.info("[YSM] Downloaded & Cached: " + outFile.getAbsolutePath());
-                    byte[] decompressed = YsmCrypt.read(cachedFileData, clientKey);
+                    CachePayload cachePayload = YsmCrypt.read(cachedFileData, clientKey);
 
-                    parseAndLoadModel(decompressed, ctx.modelId, ctx.isAuth);
+                    parseAndLoadModel(cachePayload, ctx.modelId, ctx.isAuth);
                 } catch (Exception e) {
                     YesSteveModel.LOGGER.error("[YSM] Failed to save/parse downloaded model: " + ctx.modelId, e);
                 } finally {
@@ -460,12 +518,12 @@ public class ClientModelManager {
     }
 
 
-    private static void parseAndLoadModel(byte[] decompressed, String modelId, boolean isAuth) {
+    private static void parseAndLoadModel(CachePayload cachePayload, String modelId, boolean isAuth) {
         try {
 //            if (true) return;
             // IR
 
-            try (YSMBinaryDeserializer deserializer = new YSMBinaryDeserializer(decompressed, 32)) {
+            try (YSMBinaryDeserializer deserializer = new YSMBinaryDeserializer(cachePayload.data(), cachePayload.formatVersion())) {
                 RawYsmModel rawModel = deserializer.deserializeKeepOpen();
                 YSMByteBuf reader = deserializer.getReader();
 
@@ -942,12 +1000,12 @@ public class ClientModelManager {
 
                     try {
                         byte[] fileBytes = Files.readAllBytes(file.toPath());
-                        byte[] clearText = YsmCrypt.read(fileBytes, clientKey);
+                        CachePayload cachePayload = YsmCrypt.read(fileBytes, clientKey);
 
                         int coreDataLength;
                         String exportName = file.getName(); // Fallback name
 
-                        try (YSMBinaryDeserializer deserializer = new YSMBinaryDeserializer(clearText, 32)) {
+                        try (YSMBinaryDeserializer deserializer = new YSMBinaryDeserializer(cachePayload.data(), cachePayload.formatVersion())) {
                             RawYsmModel rawModel = deserializer.deserializeKeepOpen();
                             coreDataLength = deserializer.getReader().getRawBuf().readerIndex();
 
@@ -961,9 +1019,9 @@ public class ClientModelManager {
                         exportName = exportName.replaceAll("[\\\\/:*?\"<>|]", "_");
 
                         try (YSMByteBuf outBuf = new YSMByteBuf(Unpooled.buffer())) {
-                            outBuf.writeDword(32);
+                            outBuf.writeDword(cachePayload.formatVersion());
 
-                            outBuf.getRawBuf().writeBytes(clearText, 0, coreDataLength);
+                            outBuf.getRawBuf().writeBytes(cachePayload.data(), 0, coreDataLength);
 
                             outBuf.writeVarInt(32); // Version
                             outBuf.writeVarInt(1);

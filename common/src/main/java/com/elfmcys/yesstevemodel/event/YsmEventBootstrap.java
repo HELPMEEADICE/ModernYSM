@@ -1,17 +1,7 @@
 package com.elfmcys.yesstevemodel.event;
 
-import com.elfmcys.yesstevemodel.client.event.AnimationLockEvent;
-import com.elfmcys.yesstevemodel.client.event.ClientPlayerCloneEvent;
-import com.elfmcys.yesstevemodel.client.event.ClientPlayerJoinNotification;
-import com.elfmcys.yesstevemodel.client.event.ClientSetupEvent;
-import com.elfmcys.yesstevemodel.client.event.ClientTickEvent;
-import com.elfmcys.yesstevemodel.client.event.PlayerSkinTextureManager;
-import com.elfmcys.yesstevemodel.client.input.AnimationRouletteKey;
-import com.elfmcys.yesstevemodel.client.input.DebugAnimationKey;
-import com.elfmcys.yesstevemodel.client.input.ExtraAnimationKey;
-import com.elfmcys.yesstevemodel.client.input.ExtraPlayerRenderKey;
-import com.elfmcys.yesstevemodel.client.input.InputStateKey;
-import com.elfmcys.yesstevemodel.client.input.PlayerModelToggleKey;
+import com.elfmcys.yesstevemodel.client.event.*;
+import com.elfmcys.yesstevemodel.client.input.*;
 import com.elfmcys.yesstevemodel.client.renderer.RendererManager;
 import rip.ysm.api.PlatformAPI;
 
@@ -26,12 +16,9 @@ public final class YsmEventBootstrap {
         PlayerLogoutEvent.register();
         CommonEvent.register();
         CommandRegistry.register();
-
         CapabilityEvent.register();
-
         if (!PlatformAPI.isServer()) {
             EntityJoinCallbackEvent.register();
-
             ClientSetupEvent.register();
             ClientTickEvent.register();
             ClientPlayerJoinNotification.register();
@@ -46,6 +33,5 @@ public final class YsmEventBootstrap {
             ExtraAnimationKey.register();
             InputStateKey.register();
         }
-
     }
 }

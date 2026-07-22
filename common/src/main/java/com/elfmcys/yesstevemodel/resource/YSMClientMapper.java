@@ -59,31 +59,27 @@ import java.util.*;
 import java.util.stream.IntStream;
 
 public class YSMClientMapper {
+    private static final OrderedStringMap<String, String> DEFAULT_EXTRA_ANIM;
+    static {
+        Object2ObjectArrayMap<String,String> object2ObjectArrayMap = new Object2ObjectArrayMap<>();
+        for (int i = 0; i < 10; i++) {
+            object2ObjectArrayMap.put("extra" + i, String.valueOf(i));
+        }
+        DEFAULT_EXTRA_ANIM = new OrderedStringMap<>(object2ObjectArrayMap);
+    }
 
     public static class TranslucencyScanner {
         private final BufferedImage[] images;
         private final boolean[] results;
-//        private int remaining;
 
-        public static final int STATE_INVISIBLE = 0;
-        public static final int STATE_OPAQUE = 1;
-        public static final int STATE_TRANSLUCENT = 2;
+        public static final int FLAG_VISIBLE = 1;
+        public static final int FLAG_HAS_HOLE = 2;
+        public static final int FLAG_TRANSLUCENT = 4;
 
         public TranslucencyScanner(BufferedImage[] images, int expectedCount) {
             this.images = images;
             this.results = new boolean[Math.max(expectedCount, images.length)];
-//            this.remaining = images.length;
-//
-//            for (BufferedImage image : images) {
-//                if (image == null) {
-//                    remaining--;
-//                }
-//            }
         }
-
-//        public boolean isFinished() {
-//            return remaining <= 0;
-//        }
 
         public boolean[] getResults() {
             return results;
@@ -100,8 +96,9 @@ public class YSMClientMapper {
             }
 
             boolean hasValidImage = false;
-            boolean faceHasVisiblePixel = false;
-            boolean faceHasTransparentPixel = false;
+            boolean hasVisible = false;
+            boolean hasHole = false;
+            boolean hasTranslucent = false;
 
             for (int i = 0; i < images.length; i++) {
                 if (images[i] == null) continue;
@@ -124,53 +121,29 @@ public class YSMClientMapper {
                 startY = Math.max(0, Math.min(startY, imgH - 1));
                 endY = Math.max(0, Math.min(endY, imgH - 1));
 
-                boolean imageHasVisiblePixel = false;
-                boolean imageHasTransparentPixel = false;
-                boolean imageHasColoredTranslucentPixel = false;
-
                 for (int x = startX; x <= endX; x++) {
                     for (int y = startY; y <= endY; y++) {
                         int alpha = (img.getRGB(x, y) >>> 24) & 0xFF;
 
-                        if (alpha > 0) {
-                            imageHasVisiblePixel = true;
+                        if (alpha > 0) hasVisible = true;
+                        if (alpha < 255) hasHole = true;
+                        if (alpha > 0 && alpha < 255) hasTranslucent = true;
 
-                            if (alpha < 255) {
-                                imageHasColoredTranslucentPixel = true;
-                            }
-                        }
-
-                        if (alpha < 255) {
-                            imageHasTransparentPixel = true;
-                        }
-
-                        if (imageHasVisiblePixel && imageHasTransparentPixel && imageHasColoredTranslucentPixel) {
-                            break;
-                        }
+                        if (hasVisible && hasHole && hasTranslucent) break;
                     }
-
-                    if (imageHasVisiblePixel && imageHasTransparentPixel && imageHasColoredTranslucentPixel) {
-                        break;
-                    }
+                    if (hasVisible && hasHole && hasTranslucent) break;
                 }
 
-                if (imageHasVisiblePixel) {
-                    faceHasVisiblePixel = true;
-
-                    if (imageHasTransparentPixel) {
-                        faceHasTransparentPixel = true;
-                    }
-
-                    if (imageHasColoredTranslucentPixel) {
-                        results[i] = true;
-                    }
-                }
+                if (hasTranslucent) results[i] = true;
             }
 
-            if (!hasValidImage) return STATE_OPAQUE;
-            if (!faceHasVisiblePixel) return STATE_INVISIBLE;
-            if (faceHasTransparentPixel) return STATE_TRANSLUCENT;
-            return STATE_OPAQUE;
+            if (!hasValidImage) return FLAG_VISIBLE;
+
+            int mask = 0;
+            if (hasVisible) mask |= FLAG_VISIBLE;
+            if (hasHole) mask |= FLAG_HAS_HOLE;
+            if (hasTranslucent) mask |= FLAG_TRANSLUCENT;
+            return mask;
         }
     }
 
@@ -250,7 +223,6 @@ public class YSMClientMapper {
 
             byte[] processedData = (rt.imageFormat == 2) ? rt.data : encodeToPng(img, rt.data);
             OuterFileTexture tex = new OuterFileTexture(processedData);
-
             Map<ShadersTextureType, OuterFileTexture> suffixTextures = new LinkedHashMap<>();
             for (RawYsmModel.RawTexture.SubTexture sub : rt.subTextures) {
                 if (sub.data == null) continue;
@@ -339,32 +311,32 @@ public class YSMClientMapper {
             bb.rotZ = rb.rotation[2];
             bb.parentIdx = -1;
 
-            // TODO: 优化算法
-
             boolean forceCull = allCutout;
 
             for (RawYsmModel.RawCube rc : rb.cubes) {
                 GeoModel.BakedCube bc = new GeoModel.BakedCube();
-
                 int validFaceCount = 0;
-                boolean hasTranslucentFace = false;
+                boolean cubeHasHole = false;
 
                 for (RawYsmModel.RawFace rf : rc.faces) {
-                    int faceState = scanner != null ? scanner.scan(rf) : TranslucencyScanner.STATE_OPAQUE;
+                    int faceState = scanner != null ? scanner.scan(rf) : TranslucencyScanner.FLAG_VISIBLE;
 
-                    if (faceState == TranslucencyScanner.STATE_INVISIBLE) {
+                    if ((faceState & TranslucencyScanner.FLAG_VISIBLE) == 0) {
                         continue;
                     }
 
-                    if (faceState == TranslucencyScanner.STATE_TRANSLUCENT) {
-                        hasTranslucentFace = true;
+                    if ((faceState & TranslucencyScanner.FLAG_HAS_HOLE) != 0) {
+                        cubeHasHole = true;
                     }
+
+                    boolean isTranslucent = (faceState & TranslucencyScanner.FLAG_TRANSLUCENT) != 0;
 
                     if (!forceCull && isNegativeSizedFace(rf)) {
                         forceCull = true;
                     }
 
                     GeoModel.BakedQuad bq = new GeoModel.BakedQuad();
+                    bq.isTranslucent = isTranslucent;
                     bq.normal = new Vector3f(rf.normal[0], rf.normal[1], rf.normal[2]);
                     bq.positions = new Vector3f[4];
                     bq.uvs = new Vector2f[4];
@@ -388,13 +360,8 @@ public class YSMClientMapper {
                     for (GeoModel.BakedQuad q : bc.quads) {
                         for (int i = 0; i < 4; i++) {
                             Vector3f pos = q.positions[i];
-                            float dx = pos.x - basePos.x;
-                            float dy = pos.y - basePos.y;
-                            float dz = pos.z - basePos.z;
-
-                            float distance = dx * baseNormal.x + dy * baseNormal.y + dz * baseNormal.z;
-
-                            if (Math.abs(distance) > 1e-3f) {
+                            float dx = pos.x - basePos.x, dy = pos.y - basePos.y, dz = pos.z - basePos.z;
+                            if (Math.abs(dx * baseNormal.x + dy * baseNormal.y + dz * baseNormal.z) > 1e-3f) {
                                 isZeroThickness = false;
                                 break;
                             }
@@ -407,7 +374,7 @@ public class YSMClientMapper {
 
                 if (forceCull) {
                     bc.cullable = true;
-                } else if (hasTranslucentFace) {
+                } else if (cubeHasHole) {
                     bc.cullable = false;
                 } else if (isZeroThickness && validFaceCount > 1) {
                     bc.cullable = true;
@@ -422,7 +389,6 @@ public class YSMClientMapper {
             bakedBones.add(bb);
         }
 
-        // 回填父级索引
         for (GeoModel.BakedBone b : bakedBones) {
             String parentName = parentMap.get(b.name);
             if (parentName != null && !parentName.isEmpty()) {
@@ -634,7 +600,16 @@ public class YSMClientMapper {
             }
             buttonsList.add(new ExtraAnimationButtons(rBtn.id, rBtn.name, rBtn.description, metaList.toArray(new AbstractConfig[0])));
         }
-        ModelProperties properties = new ModelProperties(rp.heightScale, rp.widthScale, rp.defaultTexture, rp.previewAnimation, new OrderedStringMap<>(new Object2ObjectArrayMap<>(rp.extraAnimations)), buttonsList.toArray(new ExtraAnimationButtons[0]), classifyList.toArray(new StringMapPair[0]), rp.isFree, rp.renderLayersFirst, rp.disablePreviewRotation);
+        ModelProperties properties = new ModelProperties(rp.heightScale,
+                rp.widthScale,
+                rp.defaultTexture,
+                rp.previewAnimation,
+                rp.extraAnimations.isEmpty() ? DEFAULT_EXTRA_ANIM : new OrderedStringMap<>(new Object2ObjectArrayMap<>(rp.extraAnimations)),
+                buttonsList.toArray(new ExtraAnimationButtons[0]),
+                classifyList.toArray(new StringMapPair[0]),
+                rp.isFree,
+                rp.renderLayersFirst,
+                rp.disablePreviewRotation);
 
         int bones = 0;
         int cubes = 0;
@@ -726,8 +701,7 @@ public class YSMClientMapper {
 
     private static ProjectileModelFiles[] buildExtraItemModels(RawYsmModel raw, GeometryDescription context, boolean mergeMultilineExpr) {
         List<ProjectileModelFiles> list = new ArrayList<>();
-        for (Map.Entry<String, RawYsmModel.RawSubEntity> entry : raw.projectiles.entrySet()) {
-            RawYsmModel.RawSubEntity sub = entry.getValue();
+        for (RawYsmModel.RawSubEntity sub : raw.projectiles) {
             ProjectileModelFiles holder = buildSubEntityHolder(sub, context, 1, mergeMultilineExpr);
             list.add(holder);
         }
@@ -736,8 +710,7 @@ public class YSMClientMapper {
 
     private static VehicleModelFiles[] buildExtraEntityModels(RawYsmModel raw, GeometryDescription context, boolean mergeMultilineExpr) {
         List<VehicleModelFiles> list = new ArrayList<>();
-        for (Map.Entry<String, RawYsmModel.RawSubEntity> entry : raw.vehicles.entrySet()) {
-            RawYsmModel.RawSubEntity sub = entry.getValue();
+        for (RawYsmModel.RawSubEntity sub : raw.vehicles) {
             VehicleModelFiles wrapper = buildSubEntityWrapper(sub, context, 1, mergeMultilineExpr);
             list.add(wrapper);
         }
@@ -763,7 +736,7 @@ public class YSMClientMapper {
             }
         }
 
-        GeoModel mesh = buildMesh(sub.model, context, textureCount, subScanner, true);
+        GeoModel mesh = buildMesh(sub.model, context, textureCount, subScanner, false);
 
         Map<String, Animation> allAnimations = new LinkedHashMap<>();
         for (Map.Entry<String, RawYsmModel.RawAnimationFile> entry : sub.animationFiles.entrySet()) {
@@ -782,7 +755,7 @@ public class YSMClientMapper {
         }
         AnimationControllerFile controllers = new AnimationControllerFile(controllerMap);
 
-        String[] matchIds = sub.matchIds != null ? sub.matchIds : new String[]{sub.identifier};
+        String[] matchIds = sub.matchIds != null && sub.matchIds.length > 0 ? sub.matchIds : new String[]{"unknown"};
         return new ProjectileModelFiles(matchIds, mesh, combinedAnim, controllers, texture);
     }
 
@@ -805,7 +778,7 @@ public class YSMClientMapper {
             }
         }
 
-        GeoModel mesh = buildMesh(sub.model, context, textureCount, subScanner, true);
+        GeoModel mesh = buildMesh(sub.model, context, textureCount, subScanner, false);
 
         Map<String, Animation> allAnimations = new LinkedHashMap<>();
         for (RawYsmModel.RawAnimationFile animFile : sub.animationFiles.values()) {
@@ -824,7 +797,7 @@ public class YSMClientMapper {
         }
         AnimationControllerFile controllers = new AnimationControllerFile(controllerMap);
 
-        String[] matchIds = sub.matchIds != null ? sub.matchIds : new String[]{sub.identifier};
+        String[] matchIds = sub.matchIds != null && sub.matchIds.length > 0 ? sub.matchIds : new String[]{"unknown"};
         return new VehicleModelFiles(matchIds, mesh, combinedAnim, controllers, texture);
     }
 

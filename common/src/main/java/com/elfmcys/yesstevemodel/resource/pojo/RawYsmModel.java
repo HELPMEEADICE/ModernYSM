@@ -8,8 +8,8 @@ public class RawYsmModel {
     public RawMetadata metadata = new RawMetadata();
     public RawProperties properties = new RawProperties();
     public RawMainEntity mainEntity = new RawMainEntity();
-    public Map<String, RawSubEntity> vehicles = new LinkedHashMap<>();
-    public Map<String, RawSubEntity> projectiles = new LinkedHashMap<>();
+    public List<RawSubEntity> vehicles = new ArrayList<>();
+    public List<RawSubEntity> projectiles = new ArrayList<>();
     public Map<String, RawDataFile> soundFiles = new LinkedHashMap<>();
     public Map<String, RawDataFile> functionFiles = new LinkedHashMap<>();
     public Map<String, RawLanguageFile> languageFiles = new LinkedHashMap<>(); // locale -> key/value
@@ -31,7 +31,6 @@ public class RawYsmModel {
     }
 
     public static class RawSubEntity {
-        public String identifier;
         public String[] matchIds;
         public RawGeometry model;
         public Map<String, RawTexture> textures = new LinkedHashMap<>();
