@@ -6,6 +6,10 @@ import com.elfmcys.yesstevemodel.util.FileTypeUtil;
 import com.elfmcys.yesstevemodel.resource.models.MainModelInfo;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 public class ServerModelInfo {
 
     @Nullable
@@ -27,7 +31,9 @@ public class ServerModelInfo {
 
     private final int hashId;
 
-    public ServerModelInfo(@Nullable Metadata metadata, ModelProperties modelProperties, MainModelInfo mainModelInfo, int formatVersion, String modelHash, String extra, long timestamp, String rand) {
+    private final Map<String, Map<String, String>> translations;
+
+    public ServerModelInfo(@Nullable Metadata metadata, ModelProperties modelProperties, MainModelInfo mainModelInfo, int formatVersion, String modelHash, String extra, long timestamp, String rand, Map<String, Map<String, String>> translations) {
         this.metadata = metadata;
         this.modelProperties = modelProperties;
         this.mainModelInfo = mainModelInfo;
@@ -37,6 +43,11 @@ public class ServerModelInfo {
         this.timestamp = timestamp;
         this.rand = rand;
         this.hashId = FileTypeUtil.parseHexId(modelHash);
+        LinkedHashMap<String, Map<String, String>> copy = new LinkedHashMap<>();
+        if (translations != null) {
+            translations.forEach((locale, values) -> copy.put(locale, values == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(values))));
+        }
+        this.translations = Collections.unmodifiableMap(copy);
     }
 
     @Nullable
@@ -74,5 +85,9 @@ public class ServerModelInfo {
 
     public int getHashId() {
         return this.hashId;
+    }
+
+    public Map<String, Map<String, String>> getTranslations() {
+        return this.translations;
     }
 }

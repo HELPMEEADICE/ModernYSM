@@ -1,6 +1,7 @@
 package com.elfmcys.yesstevemodel.geckolib3.core.keyframe;
 
 import com.elfmcys.yesstevemodel.geckolib3.core.controller.PredicateBasedController;
+import com.elfmcys.yesstevemodel.geckolib3.core.controller.AnimationControllerContext;
 import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.bone.BoneKeyFrame;
 import com.elfmcys.yesstevemodel.geckolib3.core.snapshot.BoneSnapshot;
 import com.elfmcys.yesstevemodel.geckolib3.core.snapshot.BoneTopLevelSnapshot;
@@ -40,6 +41,10 @@ public class BoneAnimationQueue {
     public AnimationPoint positionQueue;
 
     public AnimationPoint scaleQueue;
+
+    private KeyFramePoint rotationPoint;
+    private KeyFramePoint positionPoint;
+    private KeyFramePoint scalePoint;
 
     public final PredicateBasedController.TransformProviderRecord transformProviderRecord;
 
@@ -114,5 +119,32 @@ public class BoneAnimationQueue {
         this.rotationQueue = null;
         this.positionQueue = null;
         this.scaleQueue = null;
+    }
+
+    public KeyFramePoint updateRotationPoint(float currentTick, BoneKeyFrame keyFrame, AnimationControllerContext context) {
+        if (rotationPoint == null) {
+            rotationPoint = new KeyFramePoint(currentTick, keyFrame, context);
+        } else {
+            rotationPoint.reset(currentTick, keyFrame);
+        }
+        return rotationPoint;
+    }
+
+    public KeyFramePoint updatePositionPoint(float currentTick, BoneKeyFrame keyFrame, AnimationControllerContext context) {
+        if (positionPoint == null) {
+            positionPoint = new KeyFramePoint(currentTick, keyFrame, context);
+        } else {
+            positionPoint.reset(currentTick, keyFrame);
+        }
+        return positionPoint;
+    }
+
+    public KeyFramePoint updateScalePoint(float currentTick, BoneKeyFrame keyFrame, AnimationControllerContext context) {
+        if (scalePoint == null) {
+            scalePoint = new KeyFramePoint(currentTick, keyFrame, context);
+        } else {
+            scalePoint.reset(currentTick, keyFrame);
+        }
+        return scalePoint;
     }
 }

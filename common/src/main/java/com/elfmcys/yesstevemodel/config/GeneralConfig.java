@@ -32,6 +32,8 @@ public class GeneralConfig {
 
     public static ForgeConfigSpec.BooleanValue USE_GPU_RENDERER;
 
+    public static ForgeConfigSpec.BooleanValue LAZY_MODEL_LOADING;
+
     public static ForgeConfigSpec.EnumValue<RouletteSettingsMode> ROULETTE_SETTINGS_MODE;
 
     public static ForgeConfigSpec.EnumValue<RouletteMode> ROULETTE_MODE;
@@ -97,6 +99,7 @@ public class GeneralConfig {
         USE_COMPATIBILITY_RENDERER = builder.define("UseCompatibilityRenderer", false);
         builder.comment("Test renderer.");
         USE_GPU_RENDERER = builder.define("UseGpuRenderer", true);
+        LAZY_MODEL_LOADING = builder.define("LazyModelLoading", true);
         ROULETTE_SETTINGS_MODE = builder.defineEnum("RouletteSettingsMode", RouletteSettingsMode.MODERN);
         ROULETTE_MODE = builder.defineEnum("RouletteMode", RouletteMode.CLASSIC);
         BLUR_GUI = builder.define("BlurGui", true);

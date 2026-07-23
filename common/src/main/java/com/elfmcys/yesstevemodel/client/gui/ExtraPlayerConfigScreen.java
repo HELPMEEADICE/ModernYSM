@@ -33,6 +33,7 @@ public class ExtraPlayerConfigScreen extends OptionScreen {
                 .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("disable_external_first_person_anim", GeneralConfig.DISABLE_EXTERNAL_FP_ANIM)));
 
         OptionGroup performance = new OptionGroup("performance")
+                .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("lazy_model_loading", GeneralConfig.LAZY_MODEL_LOADING)))
                 .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("use_compatibility_renderer", GeneralConfig.USE_COMPATIBILITY_RENDERER)))
                 .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("use_gpu_renderer", GeneralConfig.USE_GPU_RENDERER)));
 

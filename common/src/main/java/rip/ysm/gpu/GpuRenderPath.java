@@ -34,6 +34,7 @@ public final class GpuRenderPath {
             PoseStack.Pose pose,
             float[] boneParams,
             float[] stateBuffer,
+            int textureIndex,
             int renderPartMask,
             int packedLight,
             int packedOverlay,
@@ -126,11 +127,13 @@ public final class GpuRenderPath {
             if (BoneSkinShader.locAlphaMode() >= 0) GL20.glUniform1i(BoneSkinShader.locAlphaMode(), 1);
             GL11.glDrawElements(GL11.GL_TRIANGLES, drawCount, GL11.GL_UNSIGNED_INT, offsetBytes);
 
-            RenderSystem.enableBlend();
-            RenderSystem.defaultBlendFunc();
-            if (BoneSkinShader.locAlphaMode() >= 0) GL20.glUniform1i(BoneSkinShader.locAlphaMode(), 2);
-            GL11.glDrawElements(GL11.GL_TRIANGLES, drawCount, GL11.GL_UNSIGNED_INT, offsetBytes);
-            RenderSystem.disableBlend();
+            if (model.isTranslucentTexture(textureIndex)) {
+                RenderSystem.enableBlend();
+                RenderSystem.defaultBlendFunc();
+                if (BoneSkinShader.locAlphaMode() >= 0) GL20.glUniform1i(BoneSkinShader.locAlphaMode(), 2);
+                GL11.glDrawElements(GL11.GL_TRIANGLES, drawCount, GL11.GL_UNSIGNED_INT, offsetBytes);
+                RenderSystem.disableBlend();
+            }
         }
 
         GL43.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, BoneSkinShader.ssbo, 0);

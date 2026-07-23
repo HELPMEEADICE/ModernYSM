@@ -22,9 +22,11 @@ import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.bone.BoneKeyFrame;
 import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.bone.BoneKeyFrameProcessor;
 import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.bone.EasingType;
 import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.bone.RawBoneKeyFrame;
+import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.bone.Vector3v;
 import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.event.EventKeyFrame;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.value.FloatValue;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.value.IValue;
+import com.elfmcys.yesstevemodel.geckolib3.core.molang.MolangParser;
 import com.elfmcys.yesstevemodel.geckolib3.file.*;
 import com.elfmcys.yesstevemodel.geckolib3.resource.GeckoLibCache;
 import com.elfmcys.yesstevemodel.geckolib3.util.IInterpolable;
@@ -44,8 +46,6 @@ import org.gagravarr.ogg.OggFile;
 import org.gagravarr.ogg.OggPacketReader;
 import org.gagravarr.opus.OpusFile;
 import org.gagravarr.vorbis.VorbisFile;
-import org.joml.Vector2f;
-import org.joml.Vector3f;
 import rip.ysm.imagestream.avif.AvifDecoder;
 import rip.ysm.imagestream.webp.WebpDecoder;
 
@@ -69,7 +69,8 @@ public class YSMClientMapper {
     }
 
     public static class TranslucencyScanner {
-        private final BufferedImage[] images;
+        private static final int TILE_SIZE = 8;
+        private final AlphaIndex[] indexes;
         private final boolean[] results;
 
         public static final int FLAG_VISIBLE = 1;
@@ -77,8 +78,22 @@ public class YSMClientMapper {
         public static final int FLAG_TRANSLUCENT = 4;
 
         public TranslucencyScanner(BufferedImage[] images, int expectedCount) {
-            this.images = images;
-            this.results = new boolean[Math.max(expectedCount, images.length)];
+            this.indexes = new AlphaIndex[images.length];
+            for (int i = 0; i < images.length; i++) {
+                if (images[i] != null) {
+                    this.indexes[i] = new AlphaIndex(images[i]);
+                }
+            }
+            this.results = new boolean[Math.max(expectedCount, indexes.length)];
+        }
+
+        private TranslucencyScanner(AlphaIndex[] indexes, int expectedCount) {
+            this.indexes = indexes;
+            this.results = new boolean[Math.max(expectedCount, indexes.length)];
+        }
+
+        public TranslucencyScanner fork(int expectedCount) {
+            return new TranslucencyScanner(indexes, expectedCount);
         }
 
         public boolean[] getResults() {
@@ -100,13 +115,13 @@ public class YSMClientMapper {
             boolean hasHole = false;
             boolean hasTranslucent = false;
 
-            for (int i = 0; i < images.length; i++) {
-                if (images[i] == null) continue;
+            for (int i = 0; i < indexes.length; i++) {
+                AlphaIndex index = indexes[i];
+                if (index == null) continue;
                 hasValidImage = true;
 
-                BufferedImage img = images[i];
-                int imgW = img.getWidth();
-                int imgH = img.getHeight();
+                int imgW = index.width;
+                int imgH = index.height;
 
                 int startX = (int) Math.floor(minU * imgW + 0.01f);
                 int endX = (int) Math.floor(maxU * imgW - 0.01f);
@@ -121,18 +136,10 @@ public class YSMClientMapper {
                 startY = Math.max(0, Math.min(startY, imgH - 1));
                 endY = Math.max(0, Math.min(endY, imgH - 1));
 
-                for (int x = startX; x <= endX; x++) {
-                    for (int y = startY; y <= endY; y++) {
-                        int alpha = (img.getRGB(x, y) >>> 24) & 0xFF;
-
-                        if (alpha > 0) hasVisible = true;
-                        if (alpha < 255) hasHole = true;
-                        if (alpha > 0 && alpha < 255) hasTranslucent = true;
-
-                        if (hasVisible && hasHole && hasTranslucent) break;
-                    }
-                    if (hasVisible && hasHole && hasTranslucent) break;
-                }
+                int flags = index.query(startX, endX, startY, endY);
+                hasVisible |= (flags & FLAG_VISIBLE) != 0;
+                hasHole |= (flags & FLAG_HAS_HOLE) != 0;
+                hasTranslucent |= (flags & FLAG_TRANSLUCENT) != 0;
 
                 if (hasTranslucent) results[i] = true;
             }
@@ -144,6 +151,135 @@ public class YSMClientMapper {
             if (hasHole) mask |= FLAG_HAS_HOLE;
             if (hasTranslucent) mask |= FLAG_TRANSLUCENT;
             return mask;
+        }
+
+        private static final class AlphaIndex {
+            private final int width;
+            private final int height;
+            private final byte[] pixelFlags;
+            private final int tileColumns;
+            private final int prefixStride;
+            private final int[] visiblePrefix;
+            private final int[] holePrefix;
+            private final int[] translucentPrefix;
+
+            private AlphaIndex(BufferedImage image) {
+                this.width = image.getWidth();
+                this.height = image.getHeight();
+                this.pixelFlags = new byte[width * height];
+                this.tileColumns = (width + TILE_SIZE - 1) / TILE_SIZE;
+                int tileRows = (height + TILE_SIZE - 1) / TILE_SIZE;
+                this.prefixStride = tileColumns + 1;
+
+                byte[] tileFlags = new byte[tileColumns * tileRows];
+                int[] pixels = image.getRGB(0, 0, width, height, null, 0, width);
+                for (int y = 0; y < height; y++) {
+                    int tileRowOffset = (y / TILE_SIZE) * tileColumns;
+                    int pixelRowOffset = y * width;
+                    for (int x = 0; x < width; x++) {
+                        byte flags = (byte) flagsForAlpha((pixels[pixelRowOffset + x] >>> 24) & 0xFF);
+                        pixelFlags[pixelRowOffset + x] = flags;
+                        tileFlags[tileRowOffset + x / TILE_SIZE] |= flags;
+                    }
+                }
+
+                int prefixSize = prefixStride * (tileRows + 1);
+                this.visiblePrefix = new int[prefixSize];
+                this.holePrefix = new int[prefixSize];
+                this.translucentPrefix = new int[prefixSize];
+
+                for (int tileY = 0; tileY < tileRows; tileY++) {
+                    int visibleCount = 0;
+                    int holeCount = 0;
+                    int translucentCount = 0;
+                    int tileRowOffset = tileY * tileColumns;
+                    int prefixRowOffset = (tileY + 1) * prefixStride;
+                    int previousPrefixRowOffset = tileY * prefixStride;
+
+                    for (int tileX = 0; tileX < tileColumns; tileX++) {
+                        int flags = tileFlags[tileRowOffset + tileX];
+                        if ((flags & FLAG_VISIBLE) != 0) visibleCount++;
+                        if ((flags & FLAG_HAS_HOLE) != 0) holeCount++;
+                        if ((flags & FLAG_TRANSLUCENT) != 0) translucentCount++;
+
+                        int prefixIndex = prefixRowOffset + tileX + 1;
+                        visiblePrefix[prefixIndex] = visiblePrefix[previousPrefixRowOffset + tileX + 1] + visibleCount;
+                        holePrefix[prefixIndex] = holePrefix[previousPrefixRowOffset + tileX + 1] + holeCount;
+                        translucentPrefix[prefixIndex] = translucentPrefix[previousPrefixRowOffset + tileX + 1] + translucentCount;
+                    }
+                }
+            }
+
+            private int query(int startX, int endX, int startY, int endY) {
+                int fullStartX = ((startX + TILE_SIZE - 1) / TILE_SIZE) * TILE_SIZE;
+                int fullEndX = ((endX + 1) / TILE_SIZE) * TILE_SIZE;
+                int fullStartY = ((startY + TILE_SIZE - 1) / TILE_SIZE) * TILE_SIZE;
+                int fullEndY = ((endY + 1) / TILE_SIZE) * TILE_SIZE;
+
+                if (fullStartX >= fullEndX || fullStartY >= fullEndY) {
+                    return scanPixels(startX, endX, startY, endY, 0);
+                }
+
+                int flags = queryFullTiles(
+                        fullStartX / TILE_SIZE,
+                        fullEndX / TILE_SIZE,
+                        fullStartY / TILE_SIZE,
+                        fullEndY / TILE_SIZE
+                );
+                if (flags == FLAG_VISIBLE + FLAG_HAS_HOLE + FLAG_TRANSLUCENT) return flags;
+
+                flags = scanPixels(startX, endX, startY, fullStartY - 1, flags);
+                if (flags == FLAG_VISIBLE + FLAG_HAS_HOLE + FLAG_TRANSLUCENT) return flags;
+
+                flags = scanPixels(startX, endX, fullEndY, endY, flags);
+                if (flags == FLAG_VISIBLE + FLAG_HAS_HOLE + FLAG_TRANSLUCENT) return flags;
+
+                flags = scanPixels(startX, fullStartX - 1, fullStartY, fullEndY - 1, flags);
+                if (flags == FLAG_VISIBLE + FLAG_HAS_HOLE + FLAG_TRANSLUCENT) return flags;
+
+                return scanPixels(fullEndX, endX, fullStartY, fullEndY - 1, flags);
+            }
+
+            private int queryFullTiles(int startTileX, int endTileX, int startTileY, int endTileY) {
+                int flags = 0;
+                if (prefixCount(visiblePrefix, startTileX, endTileX, startTileY, endTileY) > 0) {
+                    flags |= FLAG_VISIBLE;
+                }
+                if (prefixCount(holePrefix, startTileX, endTileX, startTileY, endTileY) > 0) {
+                    flags |= FLAG_HAS_HOLE;
+                }
+                if (prefixCount(translucentPrefix, startTileX, endTileX, startTileY, endTileY) > 0) {
+                    flags |= FLAG_TRANSLUCENT;
+                }
+                return flags;
+            }
+
+            private int prefixCount(int[] prefix, int startTileX, int endTileX, int startTileY, int endTileY) {
+                int topLeft = startTileY * prefixStride + startTileX;
+                int topRight = startTileY * prefixStride + endTileX;
+                int bottomLeft = endTileY * prefixStride + startTileX;
+                int bottomRight = endTileY * prefixStride + endTileX;
+                return prefix[bottomRight] - prefix[topRight] - prefix[bottomLeft] + prefix[topLeft];
+            }
+
+            private int scanPixels(int startX, int endX, int startY, int endY, int flags) {
+                if (startX > endX || startY > endY) return flags;
+
+                for (int y = startY; y <= endY; y++) {
+                    int rowOffset = y * width;
+                    for (int x = startX; x <= endX; x++) {
+                        flags |= pixelFlags[rowOffset + x];
+                        if (flags == FLAG_VISIBLE + FLAG_HAS_HOLE + FLAG_TRANSLUCENT) return flags;
+                    }
+                }
+                return flags;
+            }
+
+            private static int flagsForAlpha(int alpha) {
+                if (alpha == 0) return FLAG_HAS_HOLE;
+                if (alpha == 255) return FLAG_VISIBLE;
+                return FLAG_VISIBLE | FLAG_HAS_HOLE | FLAG_TRANSLUCENT;
+            }
         }
     }
 
@@ -211,7 +347,22 @@ public class YSMClientMapper {
         return encodeToPng(img, data);
     }
 
+    public static OuterFileTexture toTexture(byte[] data, int imageFormat, int width, int height) {
+        return toTexture(data, imageFormat, width, height, null);
+    }
+
+    private static OuterFileTexture toTexture(byte[] data, int imageFormat, int width, int height, BufferedImage decodedImage) {
+        int resolvedFormat = imageFormat == 0 ? YSMFolderDeserializer.detectFormat(data) : imageFormat;
+        if (resolvedFormat >= 1 && resolvedFormat <= 3) {
+            return new OuterFileTexture(data);
+        }
+        BufferedImage image = decodedImage != null ? decodedImage : decodeToImage(data, resolvedFormat, width, height);
+        return new OuterFileTexture(encodeToPng(image, data));
+    }
+
     public static ClientModelInfo buildParsedBundle(RawYsmModel raw, String modelId) {
+        Vector3v.beginConstantPooling();
+        try {
         Map<String, OuterFileTexture> mainTextures = new LinkedHashMap<>();
         int textureCount = Math.max(1, raw.mainEntity.textures.size());
 
@@ -221,16 +372,14 @@ public class YSMClientMapper {
             BufferedImage img = decodeToImage(rt.data, rt.imageFormat, rt.width, rt.height);
             imagesList.add(img);
 
-            byte[] processedData = (rt.imageFormat == 2) ? rt.data : encodeToPng(img, rt.data);
-            OuterFileTexture tex = new OuterFileTexture(processedData);
+            OuterFileTexture tex = toTexture(rt.data, rt.imageFormat, rt.width, rt.height, img);
             Map<ShadersTextureType, OuterFileTexture> suffixTextures = new LinkedHashMap<>();
             for (RawYsmModel.RawTexture.SubTexture sub : rt.subTextures) {
                 if (sub.data == null) continue;
-                byte[] processedSubData = toPng(sub.data, sub.imageFormat, sub.width, sub.height);
                 if (sub.specularType == 1) {
-                    suffixTextures.put(ShadersTextureType.NORMAL, new OuterFileTexture(processedSubData));
+                    suffixTextures.put(ShadersTextureType.NORMAL, toTexture(sub.data, sub.imageFormat, sub.width, sub.height));
                 } else if (sub.specularType == 2) {
-                    suffixTextures.put(ShadersTextureType.SPECULAR, new OuterFileTexture(processedSubData));
+                    suffixTextures.put(ShadersTextureType.SPECULAR, toTexture(sub.data, sub.imageFormat, sub.width, sub.height));
                 }
             }
             tex.setSuffixTextures(suffixTextures);
@@ -239,8 +388,7 @@ public class YSMClientMapper {
         Map<String, OuterFileTexture> avatarTextures = new LinkedHashMap<>();
         for (RawYsmModel.RawMetadata.Author author : raw.metadata.authors) {
             if (author.avatarImage == null) continue;
-            byte[] processedAvatarData = toPng(author.avatarImage.data, author.avatarImage.format, author.avatarImage.width, author.avatarImage.height);
-            OuterFileTexture tex = new OuterFileTexture(processedAvatarData);
+            OuterFileTexture tex = toTexture(author.avatarImage.data, author.avatarImage.format, author.avatarImage.width, author.avatarImage.height);
             avatarTextures.put(author.avatarImage.name, tex);
         }
         OrderedStringMap<String, OuterFileTexture> textureMap = buildTextureMap(mainTextures);
@@ -251,7 +399,7 @@ public class YSMClientMapper {
         TranslucencyScanner mainScanner = raw.mainEntity.mainModel != null ?
                 new TranslucencyScanner(imagesArray, textureCount) : null;
         TranslucencyScanner armScanner = raw.mainEntity.armModel != null ?
-                new TranslucencyScanner(imagesArray, textureCount) : null;
+                mainScanner != null ? mainScanner.fork(textureCount) : new TranslucencyScanner(imagesArray, textureCount) : null;
 
         GeoModel mainMesh = buildMesh(raw.mainEntity.mainModel, context, textureCount, mainScanner, raw.properties.allCutout);
         GeoModel armMesh = raw.mainEntity.armModel != null ? buildMesh(raw.mainEntity.armModel, context, textureCount, armScanner, raw.properties.allCutout) : mainMesh;
@@ -284,6 +432,9 @@ public class YSMClientMapper {
         Map<String, OuterFileTexture> extraTextures = buildExtraTextures(raw);
 
         return new ClientModelInfo(mainModelData, extraItemModels, extraEntityModels, extraResources, modelInfo, avatarTextures, extraTextures);
+        } finally {
+            Vector3v.endConstantPooling();
+        }
     }
 
     private static GeoModel buildMesh(RawYsmModel.RawGeometry rawGeo, GeometryDescription context, int textureCount, TranslucencyScanner scanner, boolean allCutout) {
@@ -337,16 +488,13 @@ public class YSMClientMapper {
 
                     GeoModel.BakedQuad bq = new GeoModel.BakedQuad();
                     bq.isTranslucent = isTranslucent;
-                    bq.normal = new Vector3f(rf.normal[0], rf.normal[1], rf.normal[2]);
-                    bq.positions = new Vector3f[4];
-                    bq.uvs = new Vector2f[4];
+                    System.arraycopy(rf.normal, 0, bq.normal, 0, 3);
                     for (int i = 0; i < 4; i++) {
-                        float px = rf.positions[i][0];
-                        float py = rf.positions[i][1];
-                        float pz = rf.positions[i][2];
-
-                        bq.positions[i] = new Vector3f(px, py, pz);
-                        bq.uvs[i] = new Vector2f(rf.u[i], rf.v[i]);
+                        int positionOffset = i * 3;
+                        int uvOffset = i * 2;
+                        System.arraycopy(rf.positions[i], 0, bq.positions, positionOffset, 3);
+                        bq.uvs[uvOffset] = rf.u[i];
+                        bq.uvs[uvOffset + 1] = rf.v[i];
                     }
                     bc.quads.add(bq);
                     validFaceCount++;
@@ -354,14 +502,16 @@ public class YSMClientMapper {
 
                 boolean isZeroThickness = true;
                 if (!bc.quads.isEmpty()) {
-                    Vector3f baseNormal = bc.quads.get(0).normal;
-                    Vector3f basePos = bc.quads.get(0).positions[0];
+                    float[] baseNormal = bc.quads.get(0).normal;
+                    float[] basePositions = bc.quads.get(0).positions;
 
                     for (GeoModel.BakedQuad q : bc.quads) {
                         for (int i = 0; i < 4; i++) {
-                            Vector3f pos = q.positions[i];
-                            float dx = pos.x - basePos.x, dy = pos.y - basePos.y, dz = pos.z - basePos.z;
-                            if (Math.abs(dx * baseNormal.x + dy * baseNormal.y + dz * baseNormal.z) > 1e-3f) {
+                            int offset = i * 3;
+                            float dx = q.positions[offset] - basePositions[0];
+                            float dy = q.positions[offset + 1] - basePositions[1];
+                            float dz = q.positions[offset + 2] - basePositions[2];
+                            if (Math.abs(dx * baseNormal[0] + dy * baseNormal[1] + dz * baseNormal[2]) > 1e-3f) {
                                 isZeroThickness = false;
                                 break;
                             }
@@ -572,6 +722,22 @@ public class YSMClientMapper {
     }
 
     public static ServerModelInfo buildModelInfo(RawYsmModel raw/*, String modelId*/) {
+        int bones = 0;
+        int cubes = 0;
+        int faces = 0;
+        if (raw.mainEntity.mainModel != null) {
+            bones = raw.mainEntity.mainModel.bones.size();
+            for (RawYsmModel.RawBone bone : raw.mainEntity.mainModel.bones) {
+                cubes += bone.cubes.size();
+                for (RawYsmModel.RawCube cube : bone.cubes) {
+                    faces += cube.faces.size();
+                }
+            }
+        }
+        return buildModelInfo(raw, new MainModelInfo(bones, cubes, faces));
+    }
+
+    public static ServerModelInfo buildModelInfo(RawYsmModel raw, MainModelInfo stats) {
         RawYsmModel.RawMetadata rm = raw.metadata;
         List<AuthorInfo> authors = new ArrayList<>();
         for (RawYsmModel.RawMetadata.Author a : rm.authors) {
@@ -611,27 +777,18 @@ public class YSMClientMapper {
                 rp.renderLayersFirst,
                 rp.disablePreviewRotation);
 
-        int bones = 0;
-        int cubes = 0;
-        int faces = 0;
-        if (raw.mainEntity.mainModel != null) {
-            bones = raw.mainEntity.mainModel.bones.size();
-            for (RawYsmModel.RawBone bone : raw.mainEntity.mainModel.bones) {
-                cubes += bone.cubes.size();
-                for (RawYsmModel.RawCube cube : bone.cubes) {
-                    faces += cube.faces.size();
-                }
-            }
-        }
-        MainModelInfo stats = new MainModelInfo(bones, cubes, faces);
-
         RawYsmModel.RawFooter footer = raw.footer;
+        Map<String, Map<String, String>> translations = new LinkedHashMap<>();
+        for (Map.Entry<String, RawYsmModel.RawLanguageFile> entry : raw.languageFiles.entrySet()) {
+            translations.put(entry.getKey(), entry.getValue().data);
+        }
         return new ServerModelInfo(extraInfo,
                 properties,
                 stats,
                 footer.version,
                 rp.sha256 != null ? rp.sha256 : "",
-                footer.extra, footer.time, footer.rand);
+                footer.extra, footer.time, footer.rand,
+                translations);
     }
 
     private static ModelExtraResourcesFile buildExtraResources(RawYsmModel raw) {
@@ -649,7 +806,7 @@ public class YSMClientMapper {
             byte[] data = entry.getValue().data;
             String molangScript = new String(data, StandardCharsets.UTF_8);
             try {
-                functions.put(name, GeckoLibCache.getMolangParser().parseExpression(molangScript, true));
+                functions.put(name, parseMolang(molangScript, true));
             } catch (Exception e) {
             }
         }
@@ -726,9 +883,8 @@ public class YSMClientMapper {
             for(RawYsmModel.RawTexture rt : sub.textures.values()) {
                 BufferedImage img = decodeToImage(rt.data, rt.imageFormat, rt.width, rt.height);
                 imgList.add(img);
-                byte[] processedData = (rt.imageFormat == 2) ? rt.data : encodeToPng(img, rt.data);
                 if (texture == null) {
-                    texture = new OuterFileTexture(processedData);
+                    texture = toTexture(rt.data, rt.imageFormat, rt.width, rt.height, img);
                 }
             }
             if (sub.model != null) {
@@ -768,9 +924,8 @@ public class YSMClientMapper {
             for(RawYsmModel.RawTexture rt : sub.textures.values()) {
                 BufferedImage img = decodeToImage(rt.data, rt.imageFormat, rt.width, rt.height);
                 imgList.add(img);
-                byte[] processedData = (rt.imageFormat == 2) ? rt.data : encodeToPng(img, rt.data);
                 if (texture == null) {
-                    texture = new OuterFileTexture(processedData);
+                    texture = toTexture(rt.data, rt.imageFormat, rt.width, rt.height, img);
                 }
             }
             if (sub.model != null) {
@@ -805,8 +960,7 @@ public class YSMClientMapper {
         Map<String, OuterFileTexture> result = new LinkedHashMap<>();
         for (RawYsmModel.RawImage img : raw.properties.backgroundImages) {
             if (img.name != null && !img.name.isEmpty()) {
-                byte[] processedData = toPng(img.data, img.format, img.width, img.height);
-                result.put(img.name, new OuterFileTexture(processedData));
+                result.put(img.name, toTexture(img.data, img.format, img.width, img.height));
             }
         }
         return result;
@@ -839,9 +993,18 @@ public class YSMClientMapper {
 
     public static IValue parse(String str) {
         try {
-            return GeckoLibCache.getMolangParser().parseExpression(str, false);
+            return parseMolang(str, false);
         } catch (Throwable ex) {
             return FloatValue.ZERO;
+        }
+    }
+
+    private static IValue parseMolang(String expression, boolean script) {
+        MolangParser parser = GeckoLibCache.getMolangParser();
+        try {
+            return parser.parseExpression(expression, script);
+        } finally {
+            GeckoLibCache.releaseParser(parser);
         }
     }
 

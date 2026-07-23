@@ -26,7 +26,7 @@ public class S2CModelSyncPayload {
 
     public static void handle(S2CModelSyncPayload message, PacketContext ctx) {
         if (ctx.isClientSide()) {
-            ClientModelManager.startSync(ctx.getConnection(), message.data);
+            ctx.enqueueWork(() -> ClientModelManager.startSync(ctx.getConnection(), message.data));
         }
     }
 }

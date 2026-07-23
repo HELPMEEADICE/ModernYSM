@@ -91,18 +91,15 @@ public final class GpuMeshBuilder {
                 buf.put((byte) (cube.cullable ? 1 : 0));
                 buf.putInt(cube.quads.size());
                 for (GeoModel.BakedQuad quad : cube.quads) {
-                    for (int v = 0; v < 4; v++) {
-                        buf.putFloat(quad.positions[v].x());
-                        buf.putFloat(quad.positions[v].y());
-                        buf.putFloat(quad.positions[v].z());
+                    for (float position : quad.positions) {
+                        buf.putFloat(position);
                     }
-                    for (int v = 0; v < 4; v++) {
-                        buf.putFloat(quad.uvs[v].x());
-                        buf.putFloat(quad.uvs[v].y());
+                    for (float uv : quad.uvs) {
+                        buf.putFloat(uv);
                     }
-                    buf.putFloat(quad.normal.x());
-                    buf.putFloat(quad.normal.y());
-                    buf.putFloat(quad.normal.z());
+                    buf.putFloat(quad.normal[0]);
+                    buf.putFloat(quad.normal[1]);
+                    buf.putFloat(quad.normal[2]);
                 }
             }
         }

@@ -18,12 +18,14 @@ import com.elfmcys.yesstevemodel.resource.YSMBinaryDeserializer;
 import com.elfmcys.yesstevemodel.resource.YSMBinarySerializer;
 import com.elfmcys.yesstevemodel.resource.YSMClientMapper;
 import com.elfmcys.yesstevemodel.resource.YSMFolderDeserializer;
+import com.elfmcys.yesstevemodel.resource.models.MainModelInfo;
 import com.elfmcys.yesstevemodel.resource.pojo.RawYsmModel;
 import com.elfmcys.yesstevemodel.util.YSMNativeHelper;
 import com.elfmcys.yesstevemodel.util.YSMThreadPool;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.RateLimiter;
+import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -56,10 +58,10 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
@@ -85,6 +87,7 @@ public final class ServerModelManager {
      */
     public static final Path CACHE = FOLDER.resolve("cache");
     public static final Path CACHE_SERVER_INDEX_FILE = CACHE.resolve("server_index");
+    public static final Path CACHE_SERVER_CATALOG_FILE = CACHE.resolve("server_catalog.json");
     public static final Path CACHE_SERVER = CACHE.resolve("server");
     public static final Path CACHE_CLIENT = CACHE.resolve("client");
 
@@ -108,6 +111,9 @@ public final class ServerModelManager {
     private static final SecureRandom theRandom = new SecureRandom();
     public static byte[] serverKey;
     private static volatile boolean initialized = false;
+    private static volatile String loadedSourceState;
+    private static final Gson GSON = new Gson();
+    private static final int CATALOG_VERSION = 2;
 
     private static RateLimiter bandwidthLimiter = null;
     private static Semaphore threadLimiter = null;
@@ -145,7 +151,44 @@ public final class ServerModelManager {
         public Map<String, Map<String, String>> lang;
     }
 
+    private static class CatalogFile {
+        int version = CATALOG_VERSION;
+        Map<String, CachedModelMetadata> models = new LinkedHashMap<>();
+    }
+
+    private static class CachedModelMetadata {
+        SourceSnapshot source;
+        boolean auth;
+        boolean customSkinModel;
+        RawYsmModel.RawMetadata metadata;
+        RawYsmModel.RawProperties properties;
+        RawYsmModel.RawFooter footer;
+        int bones;
+        int cubes;
+        int faces;
+        Map<String, String[]> animations;
+        Map<String, Map<String, String>> translations;
+        String[] textures;
+        String[][] projectiles;
+        String[][] vehicles;
+        long cacheSize;
+        long cacheModified;
+    }
+
+    private static class SourceSnapshot {
+        String fingerprint;
+        Map<String, SourceFileState> files = new LinkedHashMap<>();
+    }
+
+    private static class SourceFileState {
+        long size;
+        long modified;
+        String sha256;
+    }
+
     public static void reloadPacks() throws IOException {
+        initialized = false;
+        loadedSourceState = null;
         CACHE_NAME_INFO.clear();
         AUTH_MODELS.clear();
 
@@ -275,33 +318,49 @@ public final class ServerModelManager {
     }
 
     private static void extractBuiltinModels() {
-        if (Files.isDirectory(BUILT)) {
-            try (var s = Files.walk(BUILT)) {
-                s.sorted(Comparator.reverseOrder()).forEach(p -> {
-                    if (!p.equals(BUILT)) try { Files.deleteIfExists(p); } catch (IOException ignored) {}
-                });
-            } catch (IOException ignored) {}
-        }
         try {
             Path assetsBuiltin = Platform.getMod(YesSteveModel.MOD_ID).findResource("assets", YesSteveModel.MOD_ID, "builtin").orElse(null);
 
             if (assetsBuiltin == null || !Files.isDirectory(assetsBuiltin)) return;
 
+            Set<String> sourcePaths = new HashSet<>();
             try (Stream<Path> walker = Files.walk(assetsBuiltin)) {
                 walker.forEach(src -> {
                     try {
                         Path relative = assetsBuiltin.relativize(src);
+                        sourcePaths.add(relative.toString().replace('\\', '/'));
                         Path dest = ServerModelManager.BUILT.resolve(relative.toString());
                         if (Files.isDirectory(src)) {
                             Files.createDirectories(dest);
                         } else {
                             Files.createDirectories(dest.getParent());
-                            try (InputStream in = Files.newInputStream(src)) {
-                                Files.copy(in, dest);
+                            boolean unchanged = Files.isRegularFile(dest)
+                                    && Files.size(src) == Files.size(dest)
+                                    && Files.getLastModifiedTime(src).toMillis() == Files.getLastModifiedTime(dest).toMillis();
+                            if (!unchanged) {
+                                var modified = Files.getLastModifiedTime(src);
+                                Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING);
+                                try {
+                                    Files.setLastModifiedTime(dest, modified);
+                                } catch (IOException ignored) {
+                                }
                             }
                         }
                     } catch (IOException e) {
                         YesSteveModel.LOGGER.warn("Failed to extract builtin: " + src.getFileName(), e);
+                    }
+                });
+            }
+            try (Stream<Path> walker = Files.walk(BUILT)) {
+                walker.sorted(Comparator.reverseOrder()).forEach(dest -> {
+                    if (dest.equals(BUILT) || dest.equals(BUILT.resolve("notice.txt"))) return;
+                    String relative = BUILT.relativize(dest).toString().replace('\\', '/');
+                    if (!sourcePaths.contains(relative)) {
+                        try {
+                            Files.deleteIfExists(dest);
+                        } catch (IOException e) {
+                            YesSteveModel.LOGGER.warn("Failed to remove stale builtin: " + dest.getFileName(), e);
+                        }
                     }
                 });
             }
@@ -452,16 +511,36 @@ public final class ServerModelManager {
     }
 
     public static boolean nativeLoadModels(Object callback) {
+        long begin = System.currentTimeMillis();
+        ForkJoinPool pool = createLoadPool();
         try {
-            Map<String, ServerModelData> loadedModels = new LinkedHashMap<>();
-            Set<String> authIds = new HashSet<>();
-            Set<String> validCacheFiles = new HashSet<>();
+            Map<String, ServerModelData> loadedModels = new ConcurrentHashMap<>();
+            Set<String> authIds = ConcurrentHashMap.newKeySet();
+            Set<String> validCacheFiles = ConcurrentHashMap.newKeySet();
+            CatalogFile previousCatalog = readCatalog();
+            CatalogFile nextCatalog = new CatalogFile();
+            Map<String, CachedModelMetadata> nextCatalogModels = new ConcurrentHashMap<>();
+            ConcurrentMap<String, SourceSnapshot> snapshots = new ConcurrentHashMap<>();
 
             packs.clear();
 
-            scanSource(BUILT, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false);
-            scanSource(CUSTOM, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false);
-            scanSource(AUTH, CACHE_SERVER, loadedModels, authIds, validCacheFiles, true);
+            pool.submit(() -> {
+                scanSource(BUILT, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false, previousCatalog, nextCatalogModels, snapshots);
+                scanSource(CUSTOM, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false, previousCatalog, nextCatalogModels, snapshots);
+                scanSource(AUTH, CACHE_SERVER, loadedModels, authIds, validCacheFiles, true, previousCatalog, nextCatalogModels, snapshots);
+            }).get();
+
+            nextCatalog.models.putAll(nextCatalogModels);
+            loadedSourceState = computeModelSourceState();
+
+            Map<String, ServerModelData> orderedModels = new LinkedHashMap<>();
+            loadedModels.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> orderedModels.put(entry.getKey(), entry.getValue()));
+
+            try {
+                writeCatalog(nextCatalog);
+            } catch (IOException e) {
+                YesSteveModel.LOGGER.warn("Failed to write server model catalog", e);
+            }
 
             try (Stream<Path> stream = Files.list(CACHE_SERVER)) {
                 stream.forEach(file -> {
@@ -471,153 +550,473 @@ public final class ServerModelManager {
                 });
             } catch (Exception ignored) {}
 
-            ModelLoadResult result = new ModelLoadResult(true, null, loadedModels, authIds.toArray(new String[0]));
-            AUTH_MODELS = authIds;
+            YesSteveModel.LOGGER.info("[YSM] Loaded {} models in {}ms", orderedModels.size(), System.currentTimeMillis() - begin);
+            ModelLoadResult result = new ModelLoadResult(true, null, orderedModels, authIds.toArray(new String[0]));
+            AUTH_MODELS = new HashSet<>(authIds);
 
             onModelLoadComplete(result, callback);
             return true;
         } catch (Exception e) {
             YesSteveModel.LOGGER.error("[YSM] Model loading failed", e);
             return false;
+        } finally {
+            pool.shutdown();
         }
     }
 
-    private static void scanSource(Path baseDir, Path cacheDir, Map<String, ServerModelData> loaded, Set<String> authIds, Set<String> validCaches, boolean isAuth) {
+    private static ForkJoinPool createLoadPool() {
+        int cpuLimit = Runtime.getRuntime().availableProcessors();
+        Runtime runtime = Runtime.getRuntime();
+        long usedMemory = runtime.totalMemory() - runtime.freeMemory();
+        long availableMemory = runtime.maxMemory() - usedMemory;
+        long perThreadBudget = 1024L * 1024 * 1024;
+        int memoryLimit = Math.max(1, (int) Math.min(cpuLimit, availableMemory / perThreadBudget));
+        int parallelism = Math.max(1, Math.min(cpuLimit, memoryLimit));
+        YesSteveModel.LOGGER.info("Begin build cache with {} worker(s). (cpu={}, mem={}MB free, budget={}MB/thread)", parallelism, cpuLimit, availableMemory / (1024 * 1024), perThreadBudget / (1024 * 1024));
+        AtomicInteger index = new AtomicInteger();
+        return new ForkJoinPool(parallelism, p -> {
+            ForkJoinWorkerThread thread = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(p);
+            thread.setName("ModelWorker#" + index.getAndIncrement());
+            thread.setDaemon(true);
+            thread.setPriority(Thread.NORM_PRIORITY);
+            return thread;
+        }, null, true);
+    }
+
+    private static void scanSource(Path baseDir, Path cacheDir, Map<String, ServerModelData> loaded, Set<String> authIds, Set<String> validCaches, boolean isAuth, CatalogFile previousCatalog, Map<String, CachedModelMetadata> nextCatalog, ConcurrentMap<String, SourceSnapshot> snapshots) {
         if (baseDir == null || !Files.isDirectory(baseDir)) return;
 
         scanDirectoryPacks(baseDir, "");
-        scanDirectoryModels(baseDir, "", cacheDir, loaded, authIds, validCaches, isAuth);
+        String sourceGroup = baseDir.getFileName().toString();
+        scanDirectoryModels(baseDir, "", cacheDir, loaded, authIds, validCaches, isAuth, previousCatalog, nextCatalog, snapshots, sourceGroup, null);
 
-
-        try (Stream<Path> stream = Files.walk(baseDir)) {
+        List<Path> zipFiles = new ArrayList<>();
+        try (Stream<Path> stream = Files.walk(baseDir, FileVisitOption.FOLLOW_LINKS)) {
             stream.filter(Files::isRegularFile)
                     .filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".zip"))
-                    .forEach(zipFile -> {
-                        String zipName = zipFile.getFileName().toString();
-                        String zipBaseName = zipName.substring(0, zipName.length() - 4);
-
-                        Path parent = zipFile.getParent();
-                        String prefix = parent != null ? baseDir.relativize(parent).toString().replace('\\', '/') : "";
-                        if (!prefix.isEmpty() && !prefix.endsWith("/")) prefix += "/";
-
-                        try {
-                            URI uri = URI.create("jar:" + zipFile.toUri());
-                            try (FileSystem fs = FileSystems.newFileSystem(uri, Collections.emptyMap())) {
-                                Path root = fs.getPath("/");
-                                if (YSMFolderDeserializer.isModelFolder(root)) {
-                                    String modelId = prefix + zipBaseName;
-                                    try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(root)) {
-                                        RawYsmModel rawModel = deserializer.deserialize();
-                                        if (rawModel != null) {
-                                            ServerModelData data = processAndCacheModel(modelId, rawModel, cacheDir, isAuth, validCaches);
-                                            if (data != null) {
-                                                loaded.put(modelId, data);
-                                                if (isAuth) authIds.add(modelId);
-                                            }
-                                        }
-                                    } catch (Exception e) {
-                                        YesSteveModel.LOGGER.error("Failed to load model in zip: " + zipFile, e);
-                                    }
-                                } else {
-                                    scanDirectoryPacks(root, prefix);
-                                    scanDirectoryModels(root, prefix, cacheDir, loaded, authIds, validCaches, isAuth);
-                                }
-                            }
-                        } catch (Exception e) {
-                            YesSteveModel.LOGGER.error("Failed to scan zip model source: " + zipFile, e);
-                        }
-                    });
+                    .forEach(zipFiles::add);
+        } catch (FileSystemLoopException e) {
+            YesSteveModel.LOGGER.warn("Symlink loop while scanning zips in: " + baseDir, e);
         } catch (IOException e) {
             YesSteveModel.LOGGER.error("Failed to collect zip files from: " + baseDir, e);
+            return;
+        }
+
+        zipFiles.parallelStream().forEach(zipFile -> processZip(zipFile, baseDir, cacheDir, loaded, authIds, validCaches, isAuth, previousCatalog, nextCatalog, snapshots, sourceGroup));
+    }
+
+    private static void processZip(Path zipFile, Path baseDir, Path cacheDir, Map<String, ServerModelData> loaded, Set<String> authIds, Set<String> validCaches, boolean isAuth, CatalogFile previousCatalog, Map<String, CachedModelMetadata> nextCatalog, ConcurrentMap<String, SourceSnapshot> snapshots, String sourceGroup) {
+        String zipName = zipFile.getFileName().toString();
+        String zipBaseName = zipName.substring(0, zipName.length() - 4);
+
+        Path parent = zipFile.getParent();
+        String prefix = parent != null ? baseDir.relativize(parent).toString().replace('\\', '/') : "";
+        if (!prefix.isEmpty() && !prefix.endsWith("/")) prefix += "/";
+
+        try {
+            URI uri = URI.create("jar:" + zipFile.toUri());
+            try (FileSystem fs = FileSystems.newFileSystem(uri, Collections.emptyMap())) {
+                Path root = fs.getPath("/");
+                if (YSMFolderDeserializer.isModelFolder(root)) {
+                    String modelId = prefix + zipBaseName;
+                    String catalogKey = catalogKey(sourceGroup, modelId);
+                    CachedModelMetadata previous = previousCatalog.models.get(catalogKey);
+                    SourceSnapshot snapshot = snapshot(zipFile, previous != null ? previous.source : null, snapshots);
+                    ServerModelData cached = restoreCachedModel(modelId, previous, snapshot, cacheDir, isAuth, validCaches);
+                    if (cached != null) {
+                        registerModel(catalogKey, modelId, cached, previous, snapshot, loaded, authIds, nextCatalog, isAuth);
+                    } else {
+                        try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(root)) {
+                            RawYsmModel rawModel = deserializer.deserialize();
+                            registerParsedModel(catalogKey, modelId, rawModel, snapshot, cacheDir, loaded, authIds, validCaches, nextCatalog, isAuth);
+                        } catch (Exception e) {
+                            YesSteveModel.LOGGER.error("Failed to load model in zip: " + zipFile, e);
+                        }
+                    }
+                } else {
+                    scanDirectoryPacks(root, prefix);
+                    scanDirectoryModels(root, prefix, cacheDir, loaded, authIds, validCaches, isAuth, previousCatalog, nextCatalog, snapshots, sourceGroup, zipFile);
+                }
+            }
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.error("Failed to scan zip model source: " + zipFile, e);
         }
     }
 
-    private static void scanDirectoryModels(Path searchRoot, String prefix, Path cacheDir, Map<String, ServerModelData> loaded, Set<String> authIds, Set<String> validCaches, boolean isAuth) {
+    private static void scanDirectoryModels(Path searchRoot, String prefix, Path cacheDir, Map<String, ServerModelData> loaded, Set<String> authIds, Set<String> validCaches, boolean isAuth, CatalogFile previousCatalog, Map<String, CachedModelMetadata> nextCatalog, ConcurrentMap<String, SourceSnapshot> snapshots, String sourceGroup, @Nullable Path sourceOverride) {
         if (searchRoot == null || !Files.isDirectory(searchRoot)) return;
 
+        List<Path> modelFolders = new ArrayList<>();
+        List<Path> ysmFiles = new ArrayList<>();
+
         try {
-            Files.walkFileTree(searchRoot, new SimpleFileVisitor<>() {
+            Files.walkFileTree(searchRoot, EnumSet.of(FileVisitOption.FOLLOW_LINKS), Integer.MAX_VALUE, new SimpleFileVisitor<>() {
                 @Override
                 public @NotNull FileVisitResult preVisitDirectory(@NotNull Path dir, @NotNull BasicFileAttributes attrs) {
-                    if (dir.equals(searchRoot)) {
-                        return FileVisitResult.CONTINUE;
-                    }
-
+                    if (dir.equals(searchRoot)) return FileVisitResult.CONTINUE;
                     try {
                         if (YSMFolderDeserializer.isModelFolder(dir)) {
-                            String modelId = prefix + searchRoot.relativize(dir).toString().replace('\\', '/');
-
-                            RawYsmModel rawModel = null;
-                            try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(dir)) {
-                                rawModel = deserializer.deserialize();
-                            } catch (Exception e) {
-                                YesSteveModel.LOGGER.error("Failed to load model at: " + dir, e);
-                            }
-
-                            if (rawModel != null) {
-                                try {
-                                    ServerModelData data = processAndCacheModel(modelId, rawModel, cacheDir, isAuth, validCaches);
-                                    if (data != null) {
-                                        loaded.put(modelId, data);
-                                        if (isAuth) authIds.add(modelId);
-                                    }
-                                } catch (Exception e) {
-                                    YesSteveModel.LOGGER.error("Failed to process model at: " + dir, e);
-                                }
-                            }
-
+                            modelFolders.add(dir);
                             return FileVisitResult.SKIP_SUBTREE;
                         }
                     } catch (Exception e) {
                         YesSteveModel.LOGGER.error("Error checking directory: " + dir, e);
                     }
-
                     return FileVisitResult.CONTINUE;
                 }
 
                 @Override
                 public @NotNull FileVisitResult visitFile(@NotNull Path file, @NotNull BasicFileAttributes attrs) {
-                    if (!file.getFileName().toString().endsWith(".ysm")) return FileVisitResult.CONTINUE;
+                    if (file.getFileName().toString().endsWith(".ysm")) ysmFiles.add(file);
+                    return FileVisitResult.CONTINUE;
+                }
 
-                    try {
-                        String modelId = prefix + searchRoot.relativize(file).toString().replace('\\', '/');
-                        byte[] raw = Files.readAllBytes(file);
-                        int ysmCryptoVersion = YesModelUtils.getYsmCryptoVersion(raw);
-                        if (ysmCryptoVersion == -1) throw new IllegalStateException("Unknown YSM crypto version for file: " + file);
-
-                        RawYsmModel rawModel;
-                        if (ysmCryptoVersion == 1 || ysmCryptoVersion == 2) { // 旧版加密模型
-                            Map<String, byte[]> input = YesModelUtils.input(raw);
-                            try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(input)) {
-                                rawModel = deserializer.deserialize();
-                            }
-                        } else {
-                            byte[] decrypted = YsmCrypt.decryptYsmFile(raw);
-                            try (YSMBinaryDeserializer deserializer = new YSMBinaryDeserializer(decrypted)) {
-                                rawModel = deserializer.deserializeKeepOpen();
-                                deserializer.parseYSMFooter(rawModel); // 只用于gui展示数据
-                            }
-                        }
-
-                        ServerModelData data = processAndCacheModel(modelId, rawModel, cacheDir, isAuth, validCaches);
-                        if (data != null) {
-                            loaded.put(modelId, data);
-                            if (isAuth) authIds.add(modelId);
-                        }
-                    } catch (Exception e) {
-                        YesSteveModel.LOGGER.error("Failed to load binary model at: " + file, e);
+                @Override
+                public @NotNull FileVisitResult visitFileFailed(@NotNull Path file, @NotNull IOException exc) {
+                    if (exc instanceof FileSystemLoopException) {
+                        YesSteveModel.LOGGER.warn("Symlink loop skipped at: " + file);
+                        return FileVisitResult.CONTINUE;
                     }
+                    YesSteveModel.LOGGER.warn("Failed to visit: " + file, exc);
                     return FileVisitResult.CONTINUE;
                 }
             });
         } catch (IOException e) {
             YesSteveModel.LOGGER.error("Failed to walk directory tree: " + searchRoot, e);
+            return;
         }
+
+        modelFolders.parallelStream().forEach(dir -> processModelFolder(dir, searchRoot, prefix, cacheDir, loaded, authIds, validCaches, isAuth, previousCatalog, nextCatalog, snapshots, sourceGroup, sourceOverride));
+        ysmFiles.parallelStream().forEach(file -> processYsmFile(file, searchRoot, prefix, cacheDir, loaded, authIds, validCaches, isAuth, previousCatalog, nextCatalog, snapshots, sourceGroup, sourceOverride));
+    }
+
+    private static void processModelFolder(Path dir, Path searchRoot, String prefix, Path cacheDir, Map<String, ServerModelData> loaded, Set<String> authIds, Set<String> validCaches, boolean isAuth, CatalogFile previousCatalog, Map<String, CachedModelMetadata> nextCatalog, ConcurrentMap<String, SourceSnapshot> snapshots, String sourceGroup, @Nullable Path sourceOverride) {
+        try {
+            String modelId = prefix + searchRoot.relativize(dir).toString().replace('\\', '/');
+            String key = catalogKey(sourceGroup, modelId);
+            CachedModelMetadata previous = previousCatalog.models.get(key);
+            Path source = sourceOverride != null ? sourceOverride : dir;
+            SourceSnapshot current = snapshot(source, previous != null ? previous.source : null, snapshots);
+            ServerModelData cached = restoreCachedModel(modelId, previous, current, cacheDir, isAuth, validCaches);
+            if (cached != null) {
+                registerModel(key, modelId, cached, previous, current, loaded, authIds, nextCatalog, isAuth);
+                return;
+            }
+
+            RawYsmModel rawModel = null;
+            try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(dir)) {
+                rawModel = deserializer.deserialize();
+            } catch (Exception e) {
+                YesSteveModel.LOGGER.error("Failed to load model at: " + dir, e);
+            }
+
+            if (rawModel != null) {
+                try {
+                    registerParsedModel(key, modelId, rawModel, current, cacheDir, loaded, authIds, validCaches, nextCatalog, isAuth);
+                } catch (Exception e) {
+                    YesSteveModel.LOGGER.error("Failed to process model at: " + dir, e);
+                }
+            }
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.error("Error processing model folder: " + dir, e);
+        }
+    }
+
+    private static void processYsmFile(Path file, Path searchRoot, String prefix, Path cacheDir, Map<String, ServerModelData> loaded, Set<String> authIds, Set<String> validCaches, boolean isAuth, CatalogFile previousCatalog, Map<String, CachedModelMetadata> nextCatalog, ConcurrentMap<String, SourceSnapshot> snapshots, String sourceGroup, @Nullable Path sourceOverride) {
+        try {
+            String modelId = prefix + searchRoot.relativize(file).toString().replace('\\', '/');
+            String key = catalogKey(sourceGroup, modelId);
+            CachedModelMetadata previous = previousCatalog.models.get(key);
+            Path source = sourceOverride != null ? sourceOverride : file;
+            SourceSnapshot current = snapshot(source, previous != null ? previous.source : null, snapshots);
+            ServerModelData cached = restoreCachedModel(modelId, previous, current, cacheDir, isAuth, validCaches);
+            if (cached != null) {
+                registerModel(key, modelId, cached, previous, current, loaded, authIds, nextCatalog, isAuth);
+                return;
+            }
+            byte[] raw = Files.readAllBytes(file);
+            int ysmCryptoVersion = YesModelUtils.getYsmCryptoVersion(raw);
+            if (ysmCryptoVersion == -1) throw new IllegalStateException("Unknown YSM crypto version for file: " + file);
+
+            RawYsmModel rawModel;
+            if (ysmCryptoVersion == 1 || ysmCryptoVersion == 2) {
+                Map<String, byte[]> input = YesModelUtils.input(raw);
+                try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(input)) {
+                    rawModel = deserializer.deserialize();
+                }
+            } else {
+                byte[] decrypted = YsmCrypt.decryptYsmFile(raw);
+                try (YSMBinaryDeserializer deserializer = new YSMBinaryDeserializer(decrypted)) {
+                    rawModel = deserializer.deserializeKeepOpen();
+                    deserializer.parseYSMFooter(rawModel);
+                }
+            }
+
+            registerParsedModel(key, modelId, rawModel, current, cacheDir, loaded, authIds, validCaches, nextCatalog, isAuth);
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.error("Failed to load binary model at: " + file, e);
+        }
+    }
+
+    private static CatalogFile readCatalog() {
+        if (!Files.isRegularFile(CACHE_SERVER_CATALOG_FILE)) return new CatalogFile();
+        try (var reader = Files.newBufferedReader(CACHE_SERVER_CATALOG_FILE, StandardCharsets.UTF_8)) {
+            CatalogFile catalog = GSON.fromJson(reader, CatalogFile.class);
+            if (catalog == null || catalog.version != CATALOG_VERSION || catalog.models == null) return new CatalogFile();
+            return catalog;
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.warn("Failed to read server model catalog", e);
+            return new CatalogFile();
+        }
+    }
+
+    private static void writeCatalog(CatalogFile catalog) throws IOException {
+        Files.createDirectories(CACHE);
+        Path temporary = CACHE_SERVER_CATALOG_FILE.resolveSibling(CACHE_SERVER_CATALOG_FILE.getFileName() + ".tmp");
+        try (var writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+            GSON.toJson(catalog, writer);
+        }
+        try {
+            Files.move(temporary, CACHE_SERVER_CATALOG_FILE, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(temporary, CACHE_SERVER_CATALOG_FILE, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private static String catalogKey(String sourceGroup, String modelId) {
+        return sourceGroup + '|' + modelId;
+    }
+
+    private static SourceSnapshot snapshot(Path source, @Nullable SourceSnapshot previous, ConcurrentMap<String, SourceSnapshot> snapshots) throws IOException {
+        String cacheKey = source.toAbsolutePath().normalize().toString();
+        SourceSnapshot cached = snapshots.get(cacheKey);
+        if (cached != null) return cached;
+
+        SourceSnapshot current = new SourceSnapshot();
+        MessageDigest aggregate = newSha256();
+        if (Files.isRegularFile(source)) {
+            addSourceFile(source, "$", previous, current, aggregate);
+        } else {
+            List<Path> files;
+            try (Stream<Path> stream = Files.walk(source, FileVisitOption.FOLLOW_LINKS)) {
+                files = stream.filter(Files::isRegularFile).sorted(Comparator.comparing(path -> source.relativize(path).toString())).toList();
+            } catch (FileSystemLoopException e) {
+                YesSteveModel.LOGGER.warn("Symlink loop while snapshotting: " + source, e);
+                files = List.of();
+            }
+            Map<Path, SourceFileState> parallel;
+            try {
+                parallel = files.parallelStream().collect(java.util.stream.Collectors.toConcurrentMap(file -> file, file -> {
+                    try {
+                        String relative = source.relativize(file).toString().replace('\\', '/');
+                        SourceFileState old = previous != null && previous.files != null ? previous.files.get(relative) : null;
+                        SourceFileState state = new SourceFileState();
+                        state.size = Files.size(file);
+                        state.modified = Files.getLastModifiedTime(file).toMillis();
+                        if (old != null && old.size == state.size && old.modified == state.modified && old.sha256 != null) {
+                            state.sha256 = old.sha256;
+                        } else {
+                            state.sha256 = hashFile(file);
+                        }
+                        return state;
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }));
+            } catch (RuntimeException e) {
+                if (e.getCause() instanceof IOException io) throw io;
+                throw e;
+            }
+            for (Path file : files) {
+                String relative = source.relativize(file).toString().replace('\\', '/');
+                SourceFileState state = parallel.get(file);
+                current.files.put(relative, state);
+                aggregate.update(relative.getBytes(StandardCharsets.UTF_8));
+                aggregate.update((byte) 0);
+                aggregate.update(state.sha256.getBytes(StandardCharsets.US_ASCII));
+                aggregate.update((byte) 0);
+            }
+        }
+        current.fingerprint = HexFormat.of().formatHex(aggregate.digest());
+        SourceSnapshot existing = snapshots.putIfAbsent(cacheKey, current);
+        return existing != null ? existing : current;
+    }
+
+    private static void addSourceFile(Path file, String relative, @Nullable SourceSnapshot previous, SourceSnapshot current, MessageDigest aggregate) throws IOException {
+        SourceFileState old = previous != null && previous.files != null ? previous.files.get(relative) : null;
+        SourceFileState state = new SourceFileState();
+        state.size = Files.size(file);
+        state.modified = Files.getLastModifiedTime(file).toMillis();
+        if (old != null && old.size == state.size && old.modified == state.modified && old.sha256 != null) {
+            state.sha256 = old.sha256;
+        } else {
+            state.sha256 = hashFile(file);
+        }
+        current.files.put(relative, state);
+        aggregate.update(relative.getBytes(StandardCharsets.UTF_8));
+        aggregate.update((byte) 0);
+        aggregate.update(state.sha256.getBytes(StandardCharsets.US_ASCII));
+        aggregate.update((byte) 0);
+    }
+
+    private static String hashFile(Path file) throws IOException {
+        MessageDigest digest = newSha256();
+        byte[] buffer = new byte[65536];
+        try (InputStream input = Files.newInputStream(file)) {
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                if (read > 0) digest.update(buffer, 0, read);
+            }
+        }
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    private static MessageDigest newSha256() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @Nullable
+    private static ServerModelData restoreCachedModel(String modelId, @Nullable CachedModelMetadata cached, SourceSnapshot current, Path cacheDir, boolean isAuth, Set<String> validCaches) {
+        if (cached == null || cached.source == null || cached.source.fingerprint == null || !cached.source.fingerprint.equals(current.fingerprint) || cached.auth != isAuth || cached.properties == null || cached.properties.sha256 == null || cached.properties.sha256.isEmpty()) return null;
+        try {
+            long[] hashes = YsmCrypt.calculateModelHashes(cached.properties.sha256, serverKey);
+            String cacheFileName = String.format("%016x%016x", hashes[0], hashes[1]);
+            Path cacheFile = cacheDir.resolve(cacheFileName);
+            if (!Files.isRegularFile(cacheFile) || Files.size(cacheFile) != cached.cacheSize || Files.getLastModifiedTime(cacheFile).toMillis() != cached.cacheModified) return null;
+
+            RawYsmModel raw = new RawYsmModel();
+            raw.metadata = cached.metadata != null ? cached.metadata : new RawYsmModel.RawMetadata();
+            raw.properties = cached.properties;
+            raw.footer = cached.footer != null ? cached.footer : new RawYsmModel.RawFooter();
+            if (cached.translations != null) {
+                cached.translations.forEach((locale, values) -> raw.languageFiles.put(locale, new RawYsmModel.RawLanguageFile("", values)));
+            }
+            ServerModelInfo info = YSMClientMapper.buildModelInfo(raw, new MainModelInfo(cached.bones, cached.cubes, cached.faces));
+            ServerAnimationInfo animations = new ServerAnimationInfo(cached.animations != null ? cached.animations : Collections.emptyMap(), cached.textures != null ? cached.textures : new String[0]);
+            Object[] projectiles = cached.projectiles != null ? cached.projectiles : new String[0][];
+            Object[] vehicles = cached.vehicles != null ? cached.vehicles : new String[0][];
+            validCaches.add(cacheFileName);
+            return new ServerModelData(modelId, animations, projectiles, vehicles, info, cached.customSkinModel, isAuth);
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.warn("Failed to restore cached model metadata: " + modelId, e);
+            return null;
+        }
+    }
+
+    private static void registerModel(String key, String modelId, ServerModelData data, CachedModelMetadata metadata, SourceSnapshot current, Map<String, ServerModelData> loaded, Set<String> authIds, Map<String, CachedModelMetadata> nextCatalog, boolean isAuth) {
+        metadata.source = current;
+        loaded.put(modelId, data);
+        nextCatalog.put(key, metadata);
+        if (isAuth) authIds.add(modelId);
+    }
+
+    private static void registerParsedModel(String key, String modelId, @Nullable RawYsmModel raw, SourceSnapshot source, Path cacheDir, Map<String, ServerModelData> loaded, Set<String> authIds, Set<String> validCaches, Map<String, CachedModelMetadata> nextCatalog, boolean isAuth) {
+        if (raw == null) return;
+        ServerModelData data = processAndCacheModel(modelId, raw, cacheDir, isAuth, validCaches);
+        if (data == null) return;
+        loaded.put(modelId, data);
+        if (isAuth) authIds.add(modelId);
+        try {
+            CachedModelMetadata metadata = createCachedMetadata(modelId, raw, source, cacheDir, isAuth);
+            nextCatalog.put(key, metadata);
+        } catch (IOException e) {
+            YesSteveModel.LOGGER.warn("Failed to cache model metadata: " + modelId, e);
+        }
+    }
+
+    private static CachedModelMetadata createCachedMetadata(String modelId, RawYsmModel raw, SourceSnapshot source, Path cacheDir, boolean isAuth) throws IOException {
+        CachedModelMetadata cached = new CachedModelMetadata();
+        cached.source = source;
+        cached.auth = isAuth;
+        cached.customSkinModel = "misc/2_steve".equals(modelId) || "misc/1_alex".equals(modelId);
+        cached.metadata = copyMetadata(raw.metadata);
+        cached.properties = copyProperties(raw.properties);
+        cached.footer = copyFooter(raw.footer);
+
+        if (raw.mainEntity.mainModel != null) {
+            cached.bones = raw.mainEntity.mainModel.bones.size();
+            for (RawYsmModel.RawBone bone : raw.mainEntity.mainModel.bones) {
+                cached.cubes += bone.cubes.size();
+                for (RawYsmModel.RawCube cube : bone.cubes) cached.faces += cube.faces.size();
+            }
+        }
+        cached.animations = new LinkedHashMap<>();
+        for (Map.Entry<String, RawYsmModel.RawAnimationFile> entry : raw.mainEntity.animationFiles.entrySet()) {
+            cached.animations.put(entry.getKey(), entry.getValue().animations.keySet().toArray(new String[0]));
+        }
+        cached.translations = new LinkedHashMap<>();
+        for (Map.Entry<String, RawYsmModel.RawLanguageFile> entry : raw.languageFiles.entrySet()) {
+            cached.translations.put(entry.getKey(), new LinkedHashMap<>(entry.getValue().data));
+        }
+        cached.textures = raw.mainEntity.textures.keySet().toArray(new String[0]);
+        cached.projectiles = raw.projectiles.stream().map(value -> value.matchIds != null ? value.matchIds : new String[0]).toArray(String[][]::new);
+        cached.vehicles = raw.vehicles.stream().map(value -> value.matchIds != null ? value.matchIds : new String[0]).toArray(String[][]::new);
+
+        long[] hashes = YsmCrypt.calculateModelHashes(raw.properties.sha256, serverKey);
+        Path cacheFile = cacheDir.resolve(String.format("%016x%016x", hashes[0], hashes[1]));
+        cached.cacheSize = Files.size(cacheFile);
+        cached.cacheModified = Files.getLastModifiedTime(cacheFile).toMillis();
+        return cached;
+    }
+
+    private static RawYsmModel.RawMetadata copyMetadata(RawYsmModel.RawMetadata source) {
+        RawYsmModel.RawMetadata copy = new RawYsmModel.RawMetadata();
+        copy.name = source.name;
+        copy.tips = source.tips;
+        copy.licenseType = source.licenseType;
+        copy.licenseDescription = source.licenseDescription;
+        copy.links = new LinkedHashMap<>(source.links);
+        for (RawYsmModel.RawMetadata.Author author : source.authors) {
+            RawYsmModel.RawMetadata.Author item = new RawYsmModel.RawMetadata.Author();
+            item.name = author.name;
+            item.role = author.role;
+            item.comment = author.comment;
+            item.contacts = new LinkedHashMap<>(author.contacts);
+            item.avatar = author.avatar;
+            copy.authors.add(item);
+        }
+        return copy;
+    }
+
+    private static RawYsmModel.RawProperties copyProperties(RawYsmModel.RawProperties source) {
+        RawYsmModel.RawProperties copy = new RawYsmModel.RawProperties();
+        copy.sha256 = source.sha256;
+        copy.widthScale = source.widthScale;
+        copy.heightScale = source.heightScale;
+        copy.defaultTexture = source.defaultTexture;
+        copy.previewAnimation = source.previewAnimation;
+        copy.isFree = source.isFree;
+        copy.renderLayersFirst = source.renderLayersFirst;
+        copy.allCutout = source.allCutout;
+        copy.disablePreviewRotation = source.disablePreviewRotation;
+        copy.guiNoLighting = source.guiNoLighting;
+        copy.mergeMultilineExpr = source.mergeMultilineExpr;
+        copy.guiForeground = source.guiForeground;
+        copy.guiBackground = source.guiBackground;
+        copy.extraAnimations = new LinkedHashMap<>(source.extraAnimations);
+        copy.extraAnimationClassifies = new ArrayList<>(source.extraAnimationClassifies);
+        copy.extraAnimationButtons = new ArrayList<>(source.extraAnimationButtons);
+        return copy;
+    }
+
+    private static RawYsmModel.RawFooter copyFooter(RawYsmModel.RawFooter source) {
+        RawYsmModel.RawFooter copy = new RawYsmModel.RawFooter();
+        copy.version = source.version;
+        copy.unkInt1 = source.unkInt1;
+        copy.rand = source.rand;
+        copy.time = source.time;
+        copy.extra = source.extra;
+        copy.unkInt2 = source.unkInt2;
+        return copy;
     }
 
     private static void scanDirectoryPacks(Path searchRoot, String prefix) {
         if (searchRoot == null || !Files.isDirectory(searchRoot)) return;
-        try (var stream = Files.walk(searchRoot, 1)) {
+        try (var stream = Files.walk(searchRoot, 1, FileVisitOption.FOLLOW_LINKS)) {
             stream.filter(Files::isDirectory).forEach(path -> {
                 if (path.equals(searchRoot)) return;
                 Path packJson = path.resolve("ysm-pack.json");
@@ -942,7 +1341,7 @@ public final class ServerModelManager {
                 }
 
                 byte[] cacheData = Files.readAllBytes(cacheFile);
-                CachePayload cachePayload = YsmCrypt.read(cacheData, serverKey);
+                CachePayload cachePayload = YsmCrypt.readInPlace(cacheData, serverKey);
 
                 int coreDataLength;
                 try (YSMBinaryDeserializer deserializer = new YSMBinaryDeserializer(cachePayload.data(), cachePayload.formatVersion())) {
@@ -996,6 +1395,38 @@ public final class ServerModelManager {
         return AUTH_MODELS;
     }
 
+    public static boolean canReuseLoadedModels() {
+        if (!initialized || loadedSourceState == null) return false;
+        try {
+            return loadedSourceState.equals(computeModelSourceState());
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static String computeModelSourceState() throws IOException {
+        MessageDigest digest = newSha256();
+        addSourceTreeState(BUILT, "built", digest);
+        addSourceTreeState(CUSTOM, "custom", digest);
+        addSourceTreeState(AUTH, "auth", digest);
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    private static void addSourceTreeState(Path root, String group, MessageDigest digest) throws IOException {
+        if (!Files.isDirectory(root)) return;
+        try (Stream<Path> stream = Files.walk(root, FileVisitOption.FOLLOW_LINKS)) {
+            for (Path file : stream.filter(Files::isRegularFile).sorted(Comparator.comparing(path -> root.relativize(path).toString())).toList()) {
+                String relative = group + '/' + root.relativize(file).toString().replace('\\', '/');
+                digest.update(relative.getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) 0);
+                digest.update(Long.toString(Files.size(file)).getBytes(StandardCharsets.US_ASCII));
+                digest.update((byte) 0);
+                digest.update(Long.toString(Files.getLastModifiedTime(file).toMillis()).getBytes(StandardCharsets.US_ASCII));
+                digest.update((byte) 0);
+            }
+        }
+    }
+
     public static void requestPlayerAuth(ServerPlayer serverPlayer, @Nullable Consumer<UUIDComponentData> consumer) {
         MinecraftServer currentServer = GameInstance.getServer();
         currentServer.execute(() -> {
@@ -1038,18 +1469,20 @@ public final class ServerModelManager {
     private static void onModelLoadComplete(ModelLoadResult modelLoadResult, @Nullable Object obj) {
         Consumer<ModelLoadResult> consumer = (Consumer<ModelLoadResult>) obj;
         MinecraftServer currentServer = GameInstance.getServer();
-        initialized = true;
+        if (modelLoadResult.isSuccess()) {
+            IntOpenHashSet hashes = new IntOpenHashSet(modelLoadResult.getModelDefinitions().size());
+            for (ServerModelData data : modelLoadResult.getModelDefinitions().values()) {
+                hashes.add(data.getLoadedModelData().getHashId());
+            }
+            modelHashSet = hashes;
+        }
         if (currentServer != null) {
             currentServer.execute(() -> {
                 if (modelLoadResult.isSuccess()) {
-                    IntOpenHashSet intOpenHashSet = new IntOpenHashSet(modelLoadResult.getModelDefinitions().size());
-                    for (ServerModelData data : modelLoadResult.getModelDefinitions().values()) {
-                        intOpenHashSet.add(data.getLoadedModelData().getHashId());
-                    }
                     CACHE_NAME_INFO = modelLoadResult.getModelDefinitions();
-                    modelHashSet = intOpenHashSet;
                     AUTH_MODELS = modelLoadResult.getAuthModelIds();
                 }
+                initialized = modelLoadResult.isSuccess();
                 if (consumer != null) {
                     YSMThreadPool.submit(() -> consumer.accept(modelLoadResult));
                 }
@@ -1060,6 +1493,7 @@ public final class ServerModelManager {
             CACHE_NAME_INFO = modelLoadResult.getModelDefinitions();
             AUTH_MODELS = modelLoadResult.getAuthModelIds();
         }
+        initialized = modelLoadResult.isSuccess();
         if (consumer != null) {
             consumer.accept(modelLoadResult);
         }

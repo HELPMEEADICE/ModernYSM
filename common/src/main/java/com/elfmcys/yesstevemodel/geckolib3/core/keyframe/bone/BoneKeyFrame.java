@@ -17,7 +17,11 @@ public abstract class BoneKeyFrame {
         this.beginPoint = beginPoint;
     }
 
-    public abstract Vector3f evaluate(ExpressionEvaluator<?> evaluator, float percentCompleted);
+    public Vector3f evaluate(ExpressionEvaluator<?> evaluator, float percentCompleted) {
+        return evaluate(evaluator, percentCompleted, new Vector3f());
+    }
+
+    public abstract Vector3f evaluate(ExpressionEvaluator<?> evaluator, float percentCompleted, Vector3f target);
 
     public float getStartTick() {
         return this.startTick;

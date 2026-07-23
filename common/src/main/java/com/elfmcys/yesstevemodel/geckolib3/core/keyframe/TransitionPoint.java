@@ -8,6 +8,7 @@ import com.elfmcys.yesstevemodel.molang.runtime.ExpressionEvaluator;
 import org.joml.Vector3f;
 
 public class TransitionPoint extends AnimationPoint {
+    private static final ThreadLocal<Vector3f> RAW_VALUE = ThreadLocal.withInitial(Vector3f::new);
 
     public final float lerpFactor;
 
@@ -25,19 +26,17 @@ public class TransitionPoint extends AnimationPoint {
     @Override
     public Vector3f getLerpPoint(ExpressionEvaluator<AnimationContext<?>> evaluator) {
         setupControllerContext(evaluator);
-        Vector3f vector3f = this.dstKeyframe.evaluate(evaluator);
-        MathUtil.lerpValues(this.lerpFactor, this.offsetPoint, vector3f, vector3f);
         if (this.cachedValue == null) {
-            this.cachedValue = new Vector3f(vector3f);
-        } else {
-            this.cachedValue.set(vector3f);
+            this.cachedValue = new Vector3f();
         }
-        return vector3f;
+        this.dstKeyframe.evaluate(evaluator, this.cachedValue);
+        MathUtil.lerpValues(this.lerpFactor, this.offsetPoint, this.cachedValue, this.cachedValue);
+        return this.cachedValue;
     }
 
     public Vector3f evaluateRaw(ExpressionEvaluator<AnimationContext<?>> evaluator) {
         setupControllerContext(evaluator);
-        return this.dstKeyframe.evaluate(evaluator);
+        return this.dstKeyframe.evaluate(evaluator, RAW_VALUE.get());
     }
 
     public Vector3f getOffsetPoint() {

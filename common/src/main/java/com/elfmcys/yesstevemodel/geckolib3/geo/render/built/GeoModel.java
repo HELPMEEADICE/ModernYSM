@@ -11,8 +11,6 @@ import it.unimi.dsi.fastutil.ints.IntLists;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectLists;
 import org.jetbrains.annotations.NotNull;
-import org.joml.Vector2f;
-import org.joml.Vector3f;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
@@ -115,9 +113,9 @@ public class GeoModel {
     }
 
     public static class BakedQuad {
-        public Vector3f[] positions = new Vector3f[4];
-        public Vector2f[] uvs = new Vector2f[4];
-        public Vector3f normal;
+        public final float[] positions = new float[12];
+        public final float[] uvs = new float[8];
+        public final float[] normal = new float[3];
         public boolean isTranslucent;
     }
 
@@ -280,19 +278,16 @@ public class GeoModel {
                 buffer.putInt(cube.quads.size());
                 for (BakedQuad quad : cube.quads) {
                     buffer.put((byte) (quad.isTranslucent ? 1 : 0)); //是否含半透明
-                    for (int v = 0; v < 4; v++) {
-                        buffer.putFloat(quad.positions[v].x());
-                        buffer.putFloat(quad.positions[v].y());
-                        buffer.putFloat(quad.positions[v].z());
+                    for (float position : quad.positions) {
+                        buffer.putFloat(position);
                     }
-                    for (int v = 0; v < 4; v++) {
-                        buffer.putFloat(quad.uvs[v].x());
-                        buffer.putFloat(quad.uvs[v].y());
+                    for (float uv : quad.uvs) {
+                        buffer.putFloat(uv);
                     }
                     // 3 floats *4=12
-                    buffer.putFloat(quad.normal.x());
-                    buffer.putFloat(quad.normal.y());
-                    buffer.putFloat(quad.normal.z());
+                    buffer.putFloat(quad.normal[0]);
+                    buffer.putFloat(quad.normal[1]);
+                    buffer.putFloat(quad.normal[2]);
                 }
             }
         }

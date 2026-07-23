@@ -263,13 +263,16 @@ public class  AnimationControllerInstance {
         for (BoneAnimationQueue boneAnimationQueue : this.activeBoneAnimationQueues) {
             boneAnimationQueue.setBlendWeight(blendWeight);
             if (boneAnimationQueue.rotationTimeline != null) {
-                boneAnimationQueue.rotationQueue = getKeyFramePointAtTick(boneAnimationQueue.rotationTimeline, tick);
+                BoneKeyFrame frame = boneAnimationQueue.rotationTimeline.getAtTime(tick);
+                boneAnimationQueue.rotationQueue = boneAnimationQueue.updateRotationPoint(tick - frame.getStartTick(), frame, this.context);
             }
             if (boneAnimationQueue.positionTimeline != null) {
-                boneAnimationQueue.positionQueue = getKeyFramePointAtTick(boneAnimationQueue.positionTimeline, tick);
+                BoneKeyFrame frame = boneAnimationQueue.positionTimeline.getAtTime(tick);
+                boneAnimationQueue.positionQueue = boneAnimationQueue.updatePositionPoint(tick - frame.getStartTick(), frame, this.context);
             }
             if (boneAnimationQueue.scaleTimeline != null) {
-                boneAnimationQueue.scaleQueue = getKeyFramePointAtTick(boneAnimationQueue.scaleTimeline, tick);
+                BoneKeyFrame frame = boneAnimationQueue.scaleTimeline.getAtTime(tick);
+                boneAnimationQueue.scaleQueue = boneAnimationQueue.updateScalePoint(tick - frame.getStartTick(), frame, this.context);
             }
         }
     }
@@ -301,11 +304,6 @@ public class  AnimationControllerInstance {
     /**
      * 当前关键帧播放进度
      **/
-    private KeyFramePoint getKeyFramePointAtTick(InterpolationLookup<BoneKeyFrame> frames, float tick) {
-        BoneKeyFrame frame = frames.getAtTime(tick);
-        return new KeyFramePoint(tick - frame.getStartTick(), frame, this.context);
-    }
-
     /**
      * 返过渡进度
      **/

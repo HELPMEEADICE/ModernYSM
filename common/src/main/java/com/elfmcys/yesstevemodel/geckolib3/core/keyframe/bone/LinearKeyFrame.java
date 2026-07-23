@@ -17,13 +17,16 @@ public class LinearKeyFrame extends BoneKeyFrame {
     }
 
     @Override
-    public Vector3f evaluate(ExpressionEvaluator<?> evaluator, float percentCompleted) {
+    public Vector3f evaluate(ExpressionEvaluator<?> evaluator, float percentCompleted, Vector3f target) {
         if (isBegin(percentCompleted)) {
-            return this.beginPoint.eval(evaluator);
+            return this.beginPoint.eval(evaluator, target);
         }
         if (isEnd(percentCompleted)) {
-            return this.postPoint.eval(evaluator);
+            return this.postPoint.eval(evaluator, target);
         }
-        return MathUtil.lerpValues(percentCompleted, this.beginPoint.eval(evaluator), this.endPoint.eval(evaluator));
+        Vector3f end = this.endPoint.eval(evaluator, EvaluationScratch.SECOND.get());
+        this.beginPoint.eval(evaluator, target);
+        MathUtil.lerpValues(percentCompleted, target, end, target);
+        return target;
     }
 }

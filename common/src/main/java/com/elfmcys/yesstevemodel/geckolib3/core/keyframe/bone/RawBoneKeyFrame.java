@@ -1,7 +1,6 @@
 package com.elfmcys.yesstevemodel.geckolib3.core.keyframe.bone;
 
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.value.IValue;
-import com.elfmcys.yesstevemodel.geckolib3.core.molang.value.FloatValue;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.value.RotationValue;
 
 @SuppressWarnings("FieldMayBeFinal,unused")
@@ -30,28 +29,38 @@ public class RawBoneKeyFrame {
     public Vector3v preValue;
     public Vector3v postValue;
 
-    private IValue getValue(IValue value, double primitive, boolean isRotation, boolean flip) {
-        if (value == null) {
-            if (isRotation) {
-                return new FloatValue(RotationValue.convert((float) primitive, flip));
-            }
-            return new FloatValue((float) primitive);
-        }
+    private Vector3v createVector(boolean post, boolean isRotation) {
+        float x = (float) (post ? postX : preX);
+        float y = (float) (post ? postY : preY);
+        float z = (float) (post ? postZ : preZ);
+        IValue xValue = post ? postXValue : preXValue;
+        IValue yValue = post ? postYValue : preYValue;
+        IValue zValue = post ? postZValue : preZValue;
+
         if (isRotation) {
-            return new RotationValue(value, flip);
+            x = RotationValue.convert(x, true);
+            y = RotationValue.convert(y, true);
+            z = RotationValue.convert(z, false);
+            if (xValue != null) xValue = new RotationValue(xValue, true);
+            if (yValue != null) yValue = new RotationValue(yValue, true);
+            if (zValue != null) zValue = new RotationValue(zValue, false);
         }
-        return value;
+
+        if (xValue == null && yValue == null && zValue == null) {
+            return Vector3v.constant(x, y, z);
+        }
+        return new Vector3v(x, y, z, xValue, yValue, zValue);
     }
 
     public void init(boolean isRotation) {
         if (this.preValue != null) {
             return;
         }
-        this.preValue = new Vector3v(getValue(this.preXValue, this.preX, isRotation, true), getValue(this.preYValue, this.preY, isRotation, true), getValue(this.preZValue, this.preZ, isRotation, false));
+        this.preValue = createVector(false, isRotation);
         if (this.contiguous) {
             this.postValue = this.preValue;
         } else {
-            this.postValue = new Vector3v(getValue(this.postXValue, this.postX, isRotation, true), getValue(this.postYValue, this.postY, isRotation, true), getValue(this.postZValue, this.postZ, isRotation, false));
+            this.postValue = createVector(true, isRotation);
         }
 
         if (easingType == null) easingType = EasingType.LINEAR;

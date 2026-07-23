@@ -23,13 +23,23 @@ public class CatmullRomKeyFrame extends BoneKeyFrame {
     }
 
     @Override
-    public Vector3f evaluate(ExpressionEvaluator<?> evaluator, float percentCompleted) {
+    public Vector3f evaluate(ExpressionEvaluator<?> evaluator, float percentCompleted, Vector3f target) {
         if (isBegin(percentCompleted)) {
-            return this.beginPoint.eval(evaluator);
+            return this.beginPoint.eval(evaluator, target);
         }
         if (isEnd(percentCompleted)) {
-            return this.postPoint.eval(evaluator);
+            return this.postPoint.eval(evaluator, target);
         }
-        return MathUtil.catmullRom(percentCompleted, this.leftPoint.eval(evaluator), this.beginPoint.eval(evaluator), this.endPoint.eval(evaluator), this.rightPoint.eval(evaluator));
+        Vector3f[] scratch = EvaluationScratch.CATMULL.get();
+        Vector3f left = this.leftPoint.eval(evaluator, scratch[0]);
+        Vector3f begin = this.beginPoint.eval(evaluator, scratch[1]);
+        Vector3f end = this.endPoint.eval(evaluator, scratch[2]);
+        Vector3f right = this.rightPoint.eval(evaluator, scratch[3]);
+        target.set(
+                MathUtil.catmullRom(percentCompleted, left.x, begin.x, end.x, right.x),
+                MathUtil.catmullRom(percentCompleted, left.y, begin.y, end.y, right.y),
+                MathUtil.catmullRom(percentCompleted, left.z, begin.z, end.z, right.z)
+        );
+        return target;
     }
 }

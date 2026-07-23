@@ -13,14 +13,18 @@ public class TransitionKeyFrame extends BoneKeyFrame {
     }
 
     @Override
-    public Vector3f evaluate(ExpressionEvaluator<?> evaluator, float percentCompleted) {
+    public Vector3f evaluate(ExpressionEvaluator<?> evaluator, float percentCompleted, Vector3f target) {
         if (!isEnd(percentCompleted)) {
-            return this.beginPoint.eval(evaluator);
+            return this.beginPoint.eval(evaluator, target);
         }
-        return this.postPoint.eval(evaluator);
+        return this.postPoint.eval(evaluator, target);
     }
 
     public Vector3f evaluate(ExpressionEvaluator<?> evaluator) {
         return this.beginPoint.eval(evaluator);
+    }
+
+    public Vector3f evaluate(ExpressionEvaluator<?> evaluator, Vector3f target) {
+        return this.beginPoint.eval(evaluator, target);
     }
 }

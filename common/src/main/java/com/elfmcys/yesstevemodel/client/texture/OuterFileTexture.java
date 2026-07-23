@@ -33,12 +33,11 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
     }
 
     public void doLoad() {
-        try {
-            NativeImage imageIn = NativeImage.read(new ByteArrayInputStream(data));
+        try (NativeImage imageIn = NativeImage.read(new ByteArrayInputStream(data))) {
             int width = imageIn.getWidth();
             int height = imageIn.getHeight();
             TextureUtil.prepareImage(this.getId(), 0, width, height);
-            imageIn.upload(0, 0, 0, 0, 0, width, height, false, true, false, true);
+            imageIn.upload(0, 0, 0, 0, 0, width, height, false, true, false, false);
         } catch (IOException e) {
             e.printStackTrace();
         }

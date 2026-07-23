@@ -14,6 +14,9 @@ public final class ServerStartupEvent {
             if (!YesSteveModel.isAvailable()) {
                 return;
             }
+            if (ServerModelManager.canReuseLoadedModels()) {
+                return;
+            }
             ServerModelManager.loadModels(result -> {
                 if (!result.isSuccess()) {
                     server.execute(() -> {

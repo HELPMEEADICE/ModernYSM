@@ -372,6 +372,33 @@ public class YsmCrypt {
         return result;
     }
 
+    private static void modifiedChaChaDecryptInPlace(byte[] data, int dataOff, int dataLen, byte[] key, byte[] iv, long seed) throws Exception {
+        byte[] keyIv = new byte[56];
+        System.arraycopy(key, 0, keyIv, 0, 32);
+        System.arraycopy(iv, 0, keyIv, 32, 24);
+
+        CityHash ch = new CityHash();
+        long hash2 = ch.hash64WithSeed(keyIv, seed);
+        int nextRoundSize = (int) (((hash2 & 0x3FL) | 0x40L) << 6);
+        int rounds = (int) (10 * Long.remainderUnsigned(hash2, 3) + 10);
+        XChaCha20 ctx = new XChaCha20(key, iv, rounds);
+        int blockPointer = 0;
+
+        while (blockPointer < dataLen) {
+            if (blockPointer + nextRoundSize > dataLen) {
+                nextRoundSize = dataLen - blockPointer;
+            }
+            int blockOffset = dataOff + blockPointer;
+            ctx.processBytes(data, blockOffset, data, blockOffset, nextRoundSize);
+            blockPointer += nextRoundSize;
+
+            if (blockPointer < dataLen) {
+                long resHash = ch.hash64WithSeed(data, blockOffset, nextRoundSize, seed);
+                nextRoundSize = ctx.updateStateYSM(resHash);
+            }
+        }
+    }
+
     public static byte[] decrypt(byte[] packet, byte[] key) throws Exception {
         if (packet.length <= 11) throw new RuntimeException("Packet too short!");
 
@@ -444,15 +471,19 @@ public class YsmCrypt {
     }
 
     private static void mt19937XorInPlace(byte[] data, byte[] currentKeyIv, long seedDerivation) {
+        mt19937XorInPlace(data, 0, data.length, currentKeyIv, seedDerivation);
+    }
+
+    private static void mt19937XorInPlace(byte[] data, int offset, int length, byte[] currentKeyIv, long seedDerivation) {
         long mtSeed = new CityHash().hash64WithSeed(currentKeyIv, seedDerivation);
         MT19937 mt = new MT19937(mtSeed);
 
         int i = 0;
-        while (i < data.length) {
+        while (i < length) {
             long rnd = mt.extract_number();
-            for (int j = 0; j < 8 && i < data.length; ++j) {
+            for (int j = 0; j < 8 && i < length; ++j) {
                 byte keystreamByte = (byte) ((rnd >>> (j * 8)) & 0xFF);
-                data[i] = (byte) (data[i] ^ keystreamByte);
+                data[offset + i] = (byte) (data[offset + i] ^ keystreamByte);
                 i++;
             }
         }
@@ -462,6 +493,10 @@ public class YsmCrypt {
     }
 
     public static CachePayload read(byte[] cacheFileData, byte[] clientKey) throws Exception { // 1
+        return readInPlace(cacheFileData.clone(), clientKey);
+    }
+
+    public static CachePayload readInPlace(byte[] cacheFileData, byte[] clientKey) throws Exception {
         try (YSMByteBuf buf = new YSMByteBuf(Unpooled.wrappedBuffer(cacheFileData))) {
             buf.readVarInt();
             buf.readVarInt();
@@ -482,13 +517,14 @@ public class YsmCrypt {
             byte[] chachaKeyC = Arrays.copyOfRange(clientKey, 0, 32);
             byte[] chachaIvC = Arrays.copyOfRange(clientKey, 32, 56);
 
-            byte[] plainText = modifiedChaChaDecrypt(cacheFileData, headerEnd, payloadEnd - headerEnd, chachaKeyC, chachaIvC, SEED_CACHE_DECRYPTION);
-            mt19937XorInPlace(plainText, clientKey, SEED_KEY_DERIVATION);
+            int payloadLength = payloadEnd - headerEnd;
+            modifiedChaChaDecryptInPlace(cacheFileData, headerEnd, payloadLength, chachaKeyC, chachaIvC, SEED_CACHE_DECRYPTION);
+            mt19937XorInPlace(cacheFileData, headerEnd, payloadLength, clientKey, SEED_KEY_DERIVATION);
 
-            int n = ((plainText[0] & 0xFF) | ((plainText[1] & 0xFF) << 8)) & 0x3FF;
-            int zstdOffset = 2 + n;
+            int n = ((cacheFileData[headerEnd] & 0xFF) | ((cacheFileData[headerEnd + 1] & 0xFF) << 8)) & 0x3FF;
+            int zstdOffset = headerEnd + 2 + n;
 
-            return new CachePayload(YsmZstd.decompress(plainText, zstdOffset, plainText.length - zstdOffset), format);
+            return new CachePayload(YsmZstd.decompress(cacheFileData, zstdOffset, payloadEnd - zstdOffset), format);
         }
     }
 }

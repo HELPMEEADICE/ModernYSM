@@ -8,22 +8,26 @@ import org.joml.Vector3f;
 
 public class KeyFramePoint extends AnimationPoint {
 
-    public final BoneKeyFrame keyFrame;
+    public BoneKeyFrame keyFrame;
 
     public KeyFramePoint(float currentTick, BoneKeyFrame keyFrame, AnimationControllerContext context) {
         super(currentTick, keyFrame.getTotalTick(), context);
         this.keyFrame = keyFrame;
     }
 
+    public KeyFramePoint reset(float currentTick, BoneKeyFrame keyFrame) {
+        this.currentTick = currentTick;
+        this.totalTick = keyFrame.getTotalTick();
+        this.keyFrame = keyFrame;
+        return this;
+    }
+
     @Override
     public Vector3f getLerpPoint(ExpressionEvaluator<AnimationContext<?>> evaluator) {
         setupControllerContext(evaluator);
-        Vector3f vector3f = this.keyFrame.evaluate(evaluator, getPercentCompleted());
         if (this.cachedValue == null) {
-            this.cachedValue = new Vector3f(vector3f);
-        } else {
-            this.cachedValue.set(vector3f);
+            this.cachedValue = new Vector3f();
         }
-        return vector3f;
+        return this.keyFrame.evaluate(evaluator, getPercentCompleted(), this.cachedValue);
     }
 }

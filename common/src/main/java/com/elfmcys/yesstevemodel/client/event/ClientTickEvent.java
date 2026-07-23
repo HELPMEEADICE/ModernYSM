@@ -30,6 +30,7 @@ public final class ClientTickEvent {
         tickCount++;
         UploadManager.processPendingUploads();
         ModelUploadSession.tickCurrent();
+        ClientModelManager.updateModelLoadingMode();
         ClientModelManager.flushPendingModels();
         ObjectPool.cleanup();
         refreshRate = client.getWindow().getRefreshRate();

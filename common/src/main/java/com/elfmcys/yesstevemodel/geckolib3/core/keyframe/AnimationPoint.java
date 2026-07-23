@@ -9,11 +9,11 @@ public abstract class AnimationPoint {
     /**
      * 当前关键帧播放进度
      */
-    public final float currentTick;
+    public float currentTick;
     /**
      * 当前关键帧总长度
      */
-    public final float totalTick;
+    public float totalTick;
     /**
      * 与动画控制器相关的 molang 上下文
      */

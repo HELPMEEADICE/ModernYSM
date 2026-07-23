@@ -28,7 +28,6 @@ public class YSMBinaryDeserializer implements AutoCloseable{
 
 
     private RawYsmModel deserializeInternal(boolean closeOnExit) {
-        System.out.println("deserializing format " + format + " file...");
         if (format < 4) {
             deserializeLegacyV1();
         } else if (format <= 15) {
@@ -44,7 +43,6 @@ public class YSMBinaryDeserializer implements AutoCloseable{
         if (closeOnExit) {
             this.reader.close();
         }
-        System.out.println("end offset: 0x" + Integer.toHexString(offset));
         return model;
     }
 
