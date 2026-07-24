@@ -4,12 +4,7 @@ import com.elfmcys.yesstevemodel.NativeLibLoader;
 import com.elfmcys.yesstevemodel.YesSteveModel;
 import com.elfmcys.yesstevemodel.client.gui.IGuiWidget;
 import com.elfmcys.yesstevemodel.client.gui.metadata.ModelDisplayAssets;
-import com.elfmcys.yesstevemodel.client.model.ModelAssembly;
-import com.elfmcys.yesstevemodel.client.model.ModelAssemblyFactory;
-import com.elfmcys.yesstevemodel.client.model.ModelResourceBundle;
-import com.elfmcys.yesstevemodel.client.model.PlayerModelBundle;
-import com.elfmcys.yesstevemodel.client.model.ProjectileModelBundle;
-import com.elfmcys.yesstevemodel.client.model.VehicleModelBundle;
+import com.elfmcys.yesstevemodel.client.model.*;
 import com.elfmcys.yesstevemodel.client.texture.OuterFileTexture;
 import com.elfmcys.yesstevemodel.client.upload.IResourceLocatable;
 import com.elfmcys.yesstevemodel.client.upload.UploadManager;
@@ -49,10 +44,10 @@ import rip.ysm.security.YsmCrypt;
 import rip.ysm.security.YsmCrypt.CachePayload;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.net.URI;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -123,12 +118,13 @@ public class ClientModelManager {
         public final int isCustomSkinModel;
         public final int version;
 
-        public byte[] fileBuffer;
+        public Path downloadFile;
         public int totalSize;
         public int bytesReceived;
         public boolean downloadComplete;
+        public final int generation;
 
-        public ServerModelContext(long hash1, long hash2, String modelId, boolean isAuth, int isCustomSkinModel, int version) {
+        public ServerModelContext(long hash1, long hash2, String modelId, boolean isAuth, int isCustomSkinModel, int version, int generation) {
             this.uuid = new UUID(hash1, hash2);
             this.hash1 = hash1;
             this.hash2 = hash2;
@@ -136,6 +132,7 @@ public class ClientModelManager {
             this.isAuth = isAuth;
             this.isCustomSkinModel = isCustomSkinModel;
             this.version = version;
+            this.generation = generation;
         }
     }
 
@@ -183,6 +180,7 @@ public class ClientModelManager {
     }
 
     private static void registerLocalModelCatalog() {
+        if (!isLazyModelLoadingEnabled()) return;
         YesSteveModel.LOGGER.info("[YSM] Registering local model catalog for lazy loading...");
         Map<String, ServerModelData> serverModelInfo = ServerModelManager.getServerModelInfo();
         if (serverModelInfo != null && !serverModelInfo.isEmpty()) {
@@ -201,7 +199,7 @@ public class ClientModelManager {
                     Path cacheFile = ServerModelManager.CACHE_SERVER.resolve(cacheFileName);
 
                     if (Files.exists(cacheFile)) {
-                        LazyModelSource source = lazyModelSources.computeIfAbsent(modelId, ignored -> new LazyModelSource(cacheFile, ServerModelManager.serverKey, modelData.getLoadedModelData(), isAuth));
+                        LazyModelSource source = lazyModelSources.computeIfAbsent(modelId, ignored -> new LazyModelSource(cacheFile, ServerModelManager.serverKey, modelData.getLoadedModelData(), isAuth, false));
                         if (!modelAssemblyMap.containsKey(modelId)) {
                             pendingModelQueue.add(Pair.of(new LazyModelAssembly(modelId, source), modelId));
                         }
@@ -211,9 +209,13 @@ public class ClientModelManager {
                 }
             }
             flushPendingModels();
-            if (!isLazyModelLoadingEnabled()) {
-                requestAllLazyModels();
-            }
+            Minecraft.getInstance().execute(() -> {
+                if (syncState.currentState == SyncState.SYNCING) {
+                    syncState.syncedModels = syncState.totalModels;
+                    int total = syncState.totalModels;
+                    forEachGuiWidget(guiWidget -> guiWidget.onSyncProgress(total, total));
+                }
+            });
         }
     }
 
@@ -286,6 +288,7 @@ public class ClientModelManager {
     private static final List<ModelHash> cachedModelHashes = new ArrayList<>();
 
     private static void handlePacket03(YSMByteBuf buf) throws Exception {
+        int generation = modelLoadGeneration.get();
         buf.skipGarbageHeader();
         int type = buf.readVarInt(); // expect 3
         long folderHash = buf.readVarLong();
@@ -300,7 +303,7 @@ public class ClientModelManager {
         File cacheDir = ServerModelManager.CACHE_CLIENT.resolve(currentCacheFolderName).toFile();
         if (!cacheDir.exists()) cacheDir.mkdirs();
 
-        boolean useLocalModelCatalog = Minecraft.getInstance().isLocalServer();
+        boolean useLocalModelCatalog = Minecraft.getInstance().isLocalServer() && isLazyModelLoadingEnabled();
         Map<UUID, File> localCacheMap = useLocalModelCatalog ? Map.of() : YSMClientCache.buildCacheIndex(cacheDir, clientKey);
         List<ModelHash> modelsToRequest = new ArrayList<>();
 
@@ -328,7 +331,7 @@ public class ClientModelManager {
 //            System.out.println("Received model hash: " + mHash + ", id: " + modelId + ", unk1: " + isAuth + ", unk2: " + isCustomSkinModel);
             int version = buf.readVarInt(); // 对于文件夹未加密的模型，为65535
 
-            ServerModelContext ctx = new ServerModelContext(hash1, hash2, modelId, isAuth, isCustomSkinModel, version);
+            ServerModelContext ctx = new ServerModelContext(hash1, hash2, modelId, isAuth, isCustomSkinModel, version, generation);
             serverModels.put(ctx.uuid, ctx);
             validServerModelIds.add(modelId);
 
@@ -346,15 +349,16 @@ public class ClientModelManager {
 
             if (isFileValid) {
                 YesSteveModel.LOGGER.info("[YSM] Cache HIT & Validated: " + ctx.uuid);
-                    // 命中缓存
-                    modelPhraseExecutor.submit(() -> {
-                        if (clientKey == null) return;
+                    byte[] cacheKey = clientKey.clone();
+                    modelPhraseExecutor.execute(() -> {
+                        if (generation != modelLoadGeneration.get()) return;
                         try {
                             byte[] fileBytes = Files.readAllBytes(cachedFile.toPath());
-                            CachePayload cachePayload = YsmCrypt.readInPlace(fileBytes, clientKey);
-                            parseAndLoadModel(cachePayload, modelId, isAuth);
+                            if (generation != modelLoadGeneration.get()) return;
+                            CachePayload cachePayload = YsmCrypt.readInPlace(fileBytes, cacheKey);
+                            registerRemoteLazyModel(cachePayload, cachedFile.toPath(), cacheKey, ctx);
                         } catch (Exception e) {
-                            YesSteveModel.LOGGER.error("[YSM] Failed to parse and load cached model: " + modelId, e);
+                            YesSteveModel.LOGGER.error("[YSM] Failed to prepare cached model: " + modelId, e);
                         }
                     });
             } else {
@@ -473,7 +477,7 @@ public class ClientModelManager {
         UUID uuid = new UUID(hash1, hash2);
 
         ServerModelContext ctx = serverModels.get(uuid);
-        if (ctx == null) {
+        if (ctx == null || ctx.generation != modelLoadGeneration.get()) {
             YesSteveModel.LOGGER.warn("[YSM] Received unexpected file chunk for model: " + uuid);
             return;
         }
@@ -482,65 +486,58 @@ public class ClientModelManager {
         int chunkOffset = buf.readVarInt();
         int chunkLength = buf.readVarInt();
 
-        byte[] fileBuffer;
+        if (totalSize <= 0 || chunkOffset < 0 || chunkLength < 0 || chunkOffset > totalSize - chunkLength || chunkLength > buf.getRawBuf().readableBytes()) {
+            throw new IllegalArgumentException("Invalid model chunk bounds for " + uuid);
+        }
+
+        Path completedFile;
         synchronized (ctx) {
             if (ctx.downloadComplete) {
                 buf.getRawBuf().skipBytes(chunkLength);
                 return;
             }
 
-            if (ctx.fileBuffer == null) {
-                ctx.fileBuffer = new byte[totalSize];
+            if (ctx.downloadFile == null) {
+                String folder = currentCacheFolderName != null ? currentCacheFolderName : "default_cache";
+                Path cacheDir = ServerModelManager.CACHE_CLIENT.resolve(folder);
+                Files.createDirectories(cacheDir);
+                ctx.downloadFile = Files.createTempFile(cacheDir, ".ysm-download-", ".part");
                 ctx.totalSize = totalSize;
                 ctx.bytesReceived = 0;
+            } else if (ctx.totalSize != totalSize) {
+                throw new IllegalArgumentException("Model size changed during transfer for " + uuid);
             }
 
-            buf.getRawBuf().readBytes(ctx.fileBuffer, chunkOffset, chunkLength);
+            byte[] chunk = new byte[chunkLength];
+            buf.getRawBuf().readBytes(chunk);
+            try (SeekableByteChannel channel = Files.newByteChannel(ctx.downloadFile, StandardOpenOption.WRITE)) {
+                channel.position(chunkOffset);
+                ByteBuffer chunkBuffer = ByteBuffer.wrap(chunk);
+                while (chunkBuffer.hasRemaining()) {
+                    channel.write(chunkBuffer);
+                }
+            }
             ctx.bytesReceived += chunkLength;
 
             if (ctx.bytesReceived < totalSize) return;
 
-            fileBuffer = ctx.fileBuffer;
-            ctx.fileBuffer = null;
+            completedFile = ctx.downloadFile;
+            ctx.downloadFile = null;
             ctx.totalSize = 0;
             ctx.bytesReceived = 0;
             ctx.downloadComplete = true;
         }
 
-        modelPhraseExecutor.submit(() -> {
-            if (clientKey == null) return;
-            try {
-                String folder = currentCacheFolderName != null ? currentCacheFolderName : "default_cache";
-                File cacheDir = ServerModelManager.CACHE_CLIENT.resolve(folder).toFile();
-                if (!cacheDir.exists()) cacheDir.mkdirs();
-
-                byte[] cachedFileData = YsmCrypt.transcodeServerDataToClientCache(fileBuffer, serverKey, clientKey, hash1, hash2);
-
-                String legitFileName = YSMClientCache.generateCacheFileName(hash1, hash2, clientKey);
-                File outFile = new File(cacheDir, legitFileName);
-
-                try (FileOutputStream fos = new FileOutputStream(outFile)) {
-                    fos.write(cachedFileData);
-                }
-
-                YesSteveModel.LOGGER.info("[YSM] Downloaded & Cached: " + outFile.getAbsolutePath());
-                CachePayload cachePayload = YsmCrypt.readInPlace(cachedFileData, clientKey);
-
-                parseAndLoadModel(cachePayload, ctx.modelId, ctx.isAuth);
-            } catch (Exception e) {
-                YesSteveModel.LOGGER.error("[YSM] Failed to save/parse downloaded model: " + ctx.modelId, e);
-            } finally {
-                if (pendingModelsCount.decrementAndGet() <= 0) {
-                    YesSteveModel.LOGGER.info("[YSM] All missing models downloaded and loaded successfully!");
-                    onSyncComplete();
-                }
-            }
-        });
+        byte[] serverKeySnapshot = serverKey.clone();
+        byte[] clientKeySnapshot = clientKey.clone();
+        String cacheFolderSnapshot = currentCacheFolderName != null ? currentCacheFolderName : "default_cache";
+        modelPhraseExecutor.execute(new RemoteModelTask(completedFile, ctx, serverKeySnapshot, clientKeySnapshot, cacheFolderSnapshot));
     }
 
 
-    private static void parseAndLoadModel(CachePayload cachePayload, String modelId, boolean isAuth) {
+    private static void parseAndLoadModel(CachePayload cachePayload, String modelId, boolean isAuth, int generation) {
         try {
+            if (generation != modelLoadGeneration.get()) return;
 //            if (true) return;
             // IR
 
@@ -563,12 +560,30 @@ public class ClientModelManager {
                     rawModel.footer.unkInt2 = reader.readVarInt();
                 }
 
-                // 组装到客户端模型
-                ClientModelInfo parsedBundle = YSMClientMapper.buildParsedBundle(rawModel, modelId);
+            // 组装到客户端模型
+            ClientModelInfo parsedBundle = YSMClientMapper.buildParsedBundle(rawModel, modelId);
+            if (generation == modelLoadGeneration.get()) {
                 onModelDataReceived(parsedBundle, modelId, false, isAuth);
+            }
             }
         } catch (Exception e) {
             YesSteveModel.LOGGER.error("[YSM] Failed to parse and load model: " + modelId, e);
+        }
+    }
+
+    private static void registerRemoteLazyModel(CachePayload cachePayload, Path cacheFile, byte[] cacheKey, ServerModelContext context) {
+        if (context.generation != modelLoadGeneration.get()) return;
+        try (YSMBinaryDeserializer deserializer = new YSMBinaryDeserializer(cachePayload.data(), cachePayload.formatVersion())) {
+            RawYsmModel rawModel = deserializer.deserializeKeepOpen();
+            ServerModelInfo modelInfo = YSMClientMapper.buildModelInfo(rawModel);
+            if (context.generation != modelLoadGeneration.get()) return;
+
+            LazyModelSource source = new LazyModelSource(cacheFile, cacheKey, modelInfo, context.isAuth, true);
+            lazyModelSources.put(context.modelId, source);
+            pendingModelQueue.add(Pair.of(new LazyModelAssembly(context.modelId, source), context.modelId));
+            processModelData(null, context.modelId, false, context.isAuth);
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.error("[YSM] Failed to prepare lazy model: " + context.modelId, e);
         }
     }
 
@@ -593,7 +608,7 @@ public class ClientModelManager {
         ArrayList<Runnable> discardedModelTasks = new ArrayList<>();
         modelPhraseExecutor.getQueue().drainTo(discardedModelTasks);
         for (Runnable task : discardedModelTasks) {
-            if (task instanceof PreparedModelTask preparedTask) preparedTask.cancel();
+            if (task instanceof CancellableModelTask cancellableTask) cancellableTask.cancel();
         }
         modelPrepareExecutor.getQueue().clear();
 
@@ -607,7 +622,23 @@ public class ClientModelManager {
             loadedLocalModelAccess.clear();
         }
 
+        for (ServerModelContext ctx : serverModels.values()) {
+            deleteQuietly(ctx.downloadFile);
+        }
         serverModels.clear();
+
+        Map<String, ModelAssembly> oldModels = modelAssemblyMap;
+        Object2ReferenceOpenHashMap<String, ModelAssembly> retainedModels = new Object2ReferenceOpenHashMap<>();
+        ModelAssembly defaultModel = oldModels.get("default");
+        if (defaultModel != null) retainedModels.put("default", defaultModel);
+        modelAssemblyMap = retainedModels;
+        ArrayList<ModelAssembly> discardedModels = new ArrayList<>();
+        for (Map.Entry<String, ModelAssembly> entry : oldModels.entrySet()) {
+            if (!"default".equals(entry.getKey())) discardedModels.add(entry.getValue());
+        }
+        if (!discardedModels.isEmpty()) {
+            Minecraft.getInstance().execute(() -> discardedModels.forEach(ClientModelManager::releaseModelAssembly));
+        }
 
         Map<String, ModelPackData> oldPreviews = modelPackMap;
         if (oldPreviews != null && !oldPreviews.isEmpty()) {
@@ -1001,10 +1032,9 @@ public class ClientModelManager {
             boolean slotAcquired = false;
             boolean handedOff = false;
             try {
-                if (fullPreload && isLazyModelLoadingEnabled()) return;
+                if (generation != modelLoadGeneration.get()) return;
                 preparedModelSlots.acquire();
                 slotAcquired = true;
-                if (fullPreload && isLazyModelLoadingEnabled()) return;
                 if (generation != modelLoadGeneration.get()) return;
                 byte[] fileData = Files.readAllBytes(source.cacheFile());
                 if (generation != modelLoadGeneration.get() || lazyModelSources.get(modelId) != source) return;
@@ -1026,8 +1056,10 @@ public class ClientModelManager {
     }
 
     private static void requestAllLazyModels() {
-        for (String modelId : new ArrayList<>(lazyModelSources.keySet())) {
-            requestLazyModel(modelId, true);
+        for (Map.Entry<String, LazyModelSource> entry : new ArrayList<>(lazyModelSources.entrySet())) {
+            if (!entry.getValue().alwaysLazy()) {
+                requestLazyModel(entry.getKey(), true);
+            }
         }
     }
 
@@ -1039,6 +1071,8 @@ public class ClientModelManager {
         boolean enabled = isLazyModelLoadingEnabled();
         if (lastLazyModelLoading != null && lastLazyModelLoading == enabled) return;
         lastLazyModelLoading = enabled;
+        modelLoadGeneration.incrementAndGet();
+        loadingLazyModels.clear();
         if (!enabled) {
             requestAllLazyModels();
             return;
@@ -1072,7 +1106,7 @@ public class ClientModelManager {
     }
 
     private static void trimLoadedLocalModels(Object2ReferenceOpenHashMap<String, ModelAssembly> map) {
-        if (!isLazyModelLoadingEnabled()) return;
+        boolean localLazyLoading = isLazyModelLoadingEnabled();
         ArrayList<ModelAssembly> removed = new ArrayList<>();
         synchronized (loadedLocalModelAccessLock) {
             Iterator<String> iterator = loadedLocalModelAccess.keySet().iterator();
@@ -1084,6 +1118,7 @@ public class ClientModelManager {
                     iterator.remove();
                     continue;
                 }
+                if (!source.alwaysLazy() && !localLazyLoading) continue;
                 map.put(modelId, new LazyModelAssembly(modelId, source));
                 iterator.remove();
                 removed.add(assembly);
@@ -1111,13 +1146,78 @@ public class ClientModelManager {
         }
     }
 
-    private record LazyModelSource(Path cacheFile, byte[] key, ServerModelInfo modelInfo, boolean isAuth) {
+    private record LazyModelSource(Path cacheFile, byte[] key, ServerModelInfo modelInfo, boolean isAuth, boolean alwaysLazy) {
         private LazyModelSource {
             key = key.clone();
         }
     }
 
-    private static final class PreparedModelTask implements Runnable {
+    private interface CancellableModelTask extends Runnable {
+        void cancel();
+    }
+
+    private static void deleteQuietly(@Nullable Path path) {
+        if (path == null) return;
+        try {
+            Files.deleteIfExists(path);
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.warn("[YSM] Failed to remove temporary model download: " + path, e);
+        }
+    }
+
+    private static final class RemoteModelTask implements CancellableModelTask {
+        private final Path downloadFile;
+        private final ServerModelContext context;
+        private final byte[] serverKey;
+        private final byte[] clientKey;
+        private final String cacheFolder;
+        private final AtomicBoolean claimed = new AtomicBoolean();
+
+        private RemoteModelTask(Path downloadFile, ServerModelContext context, byte[] serverKey, byte[] clientKey, String cacheFolder) {
+            this.downloadFile = downloadFile;
+            this.context = context;
+            this.serverKey = serverKey;
+            this.clientKey = clientKey;
+            this.cacheFolder = cacheFolder;
+        }
+
+        @Override
+        public void run() {
+            if (!claimed.compareAndSet(false, true)) return;
+            try {
+                if (context.generation != modelLoadGeneration.get()) return;
+                byte[] fileBuffer = Files.readAllBytes(downloadFile);
+                if (context.generation != modelLoadGeneration.get()) return;
+                byte[] cachedFileData = YsmCrypt.transcodeServerDataToClientCache(fileBuffer, serverKey, clientKey, context.hash1, context.hash2);
+                if (context.generation != modelLoadGeneration.get()) return;
+
+                Path cacheDir = ServerModelManager.CACHE_CLIENT.resolve(cacheFolder);
+                Files.createDirectories(cacheDir);
+                String cacheName = YSMClientCache.generateCacheFileName(context.hash1, context.hash2, clientKey);
+                Path cacheFile = cacheDir.resolve(cacheName);
+                Files.write(cacheFile, cachedFileData);
+
+                YesSteveModel.LOGGER.info("[YSM] Downloaded & Cached: " + cacheFile.toAbsolutePath());
+                CachePayload cachePayload = YsmCrypt.readInPlace(cachedFileData, clientKey);
+                registerRemoteLazyModel(cachePayload, cacheFile, clientKey, context);
+            } catch (Exception e) {
+                YesSteveModel.LOGGER.error("[YSM] Failed to save/parse downloaded model: " + context.modelId, e);
+            } finally {
+                deleteQuietly(downloadFile);
+                if (context.generation == modelLoadGeneration.get() && pendingModelsCount.decrementAndGet() <= 0) {
+                    YesSteveModel.LOGGER.info("[YSM] All missing models downloaded and loaded successfully!");
+                    onSyncComplete();
+                }
+            }
+        }
+
+        @Override
+        public void cancel() {
+            if (claimed.compareAndSet(false, true)) deleteQuietly(downloadFile);
+        }
+    }
+
+    private static final class PreparedModelTask implements CancellableModelTask {
         private final CachePayload cachePayload;
         private final String modelId;
         private final LazyModelSource source;
@@ -1137,15 +1237,16 @@ public class ClientModelManager {
         public void run() {
             if (!claimed.compareAndSet(false, true)) return;
             try {
-                if (generation == modelLoadGeneration.get() && (!fullPreload || !isLazyModelLoadingEnabled()) && lazyModelSources.get(modelId) == source) {
-                    parseAndLoadModel(cachePayload, modelId, source.isAuth());
+                if (generation == modelLoadGeneration.get() && lazyModelSources.get(modelId) == source) {
+                    parseAndLoadModel(cachePayload, modelId, source.isAuth(), generation);
                 }
             } finally {
                 release();
             }
         }
 
-        private void cancel() {
+        @Override
+        public void cancel() {
             if (claimed.compareAndSet(false, true)) release();
         }
 

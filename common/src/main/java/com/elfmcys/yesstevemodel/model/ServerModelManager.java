@@ -1141,7 +1141,8 @@ public final class ServerModelManager {
                 if (currentServer == null) return;
 
                 for (UUID uuid : uuids) {
-                    PlayerSyncState state = syncStates.computeIfAbsent(uuid, k -> new PlayerSyncState());
+                    PlayerSyncState state = new PlayerSyncState();
+                    syncStates.put(uuid, state);
                     state.allowedModels.clear();
                     state.allowedModels.addAll(CACHE_NAME_INFO.values());
                     state.step = 1;
@@ -1257,8 +1258,10 @@ public final class ServerModelManager {
 
     private static void sendPacket05(UUID uuid, PlayerSyncState state, List<long[]> requestedHashes) {
         YSMThreadPool.submitSync(() -> {
+            boolean permitAcquired = false;
             try {
                 threadLimiter.acquire();
+                permitAcquired = true;
 
                 PendingTransfer transfer = new PendingTransfer();
 
@@ -1279,6 +1282,9 @@ public final class ServerModelManager {
                     int offset = 0;
 
                     while (offset < totalSize) {
+                        if (syncStates.get(uuid) != state) {
+                            return;
+                        }
                         int length = Math.min(chunkSize, totalSize - offset);
 
                         int garbageLen = 16 + theRandom.nextInt(48);
@@ -1304,7 +1310,7 @@ public final class ServerModelManager {
                             if (success) {
                                 offset += length;
                             } else {
-                                try { Thread.sleep(5); } catch (InterruptedException e) {}
+                                return;
                             }
                         }
                     }
@@ -1312,7 +1318,9 @@ public final class ServerModelManager {
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("Failed to send model chunks to " + uuid, e);
             } finally {
-                threadLimiter.release();
+                if (permitAcquired) {
+                    threadLimiter.release();
+                }
             }
         });
     }

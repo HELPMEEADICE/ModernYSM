@@ -26,6 +26,7 @@ public final class NetworkHandler {
     private static final AttributeKey<String> CHANNEL_VERSION_KEY = AttributeKey.valueOf("yes_steve_model_channel_version");
 
     private static volatile boolean clientHandshakeComplete = false;
+    private static volatile boolean serverSupportsModelSyncFragments = false;
 
     public static boolean setChannelVersion(Connection connection, String str) {
         return ((ConnectionAccessor) connection).ysm$getChannel().attr(CHANNEL_VERSION_KEY).compareAndSet(null, str);
@@ -37,6 +38,15 @@ public final class NetworkHandler {
 
     public static void resetClientHandshake() {
         clientHandshakeComplete = false;
+        serverSupportsModelSyncFragments = false;
+    }
+
+    public static void setServerSupportsModelSyncFragments(boolean supported) {
+        serverSupportsModelSyncFragments = supported;
+    }
+
+    public static boolean serverSupportsModelSyncFragments() {
+        return serverSupportsModelSyncFragments;
     }
 
     public static boolean isPlayerConnected(ServerPlayer serverPlayer) {
@@ -89,6 +99,12 @@ public final class NetworkHandler {
     public static void sendToServer(Object obj) {
         if (isClientConnected()) {
             YSMChannel.sendToServer(obj);
+        }
+    }
+
+    public static void sendVersionCheck(Connection connection) {
+        if (connection != null && connection.isConnected()) {
+            connection.send(toServerboundPacket(new C2SVersionCheckPacket()));
         }
     }
 
