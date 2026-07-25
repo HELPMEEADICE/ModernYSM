@@ -2,6 +2,7 @@ package com.elfmcys.yesstevemodel.client;
 
 import com.elfmcys.yesstevemodel.NativeLibLoader;
 import com.elfmcys.yesstevemodel.YesSteveModel;
+import com.elfmcys.yesstevemodel.capability.PlayerCapability;
 import com.elfmcys.yesstevemodel.client.gui.IGuiWidget;
 import com.elfmcys.yesstevemodel.client.gui.metadata.ModelDisplayAssets;
 import com.elfmcys.yesstevemodel.client.model.*;
@@ -30,6 +31,7 @@ import it.unimi.dsi.fastutil.objects.Object2ReferenceOpenHashMap;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
@@ -94,6 +96,7 @@ public class ClientModelManager {
     private static volatile Map<String, ModelPackData> modelPackMap = new Object2ReferenceOpenHashMap<>();
     private static final int MAX_LOADED_LOCAL_MODELS = 64;
     private static final Map<String, LazyModelSource> lazyModelSources = new ConcurrentHashMap<>();
+    private static final Set<String> localOnlyModelIds = ConcurrentHashMap.newKeySet();
     private static final Set<String> loadingLazyModels = ConcurrentHashMap.newKeySet();
     private static final LinkedHashMap<String, Boolean> loadedLocalModelAccess = new LinkedHashMap<>(64, 0.75f, true);
     private static final Object loadedLocalModelAccessLock = new Object();
@@ -180,7 +183,7 @@ public class ClientModelManager {
     }
 
     private static void registerLocalModelCatalog() {
-        if (!isLazyModelLoadingEnabled()) return;
+        if (!isLazyModelLoadingEnabled() && !ClientOnlyMode.isActive()) return;
         YesSteveModel.LOGGER.info("[YSM] Registering local model catalog for lazy loading...");
         Map<String, ServerModelData> serverModelInfo = ServerModelManager.getServerModelInfo();
         if (serverModelInfo != null && !serverModelInfo.isEmpty()) {
@@ -200,6 +203,7 @@ public class ClientModelManager {
 
                     if (Files.exists(cacheFile)) {
                         LazyModelSource source = lazyModelSources.computeIfAbsent(modelId, ignored -> new LazyModelSource(cacheFile, ServerModelManager.serverKey, modelData.getLoadedModelData(), isAuth, false));
+                        localOnlyModelIds.add(modelId);
                         if (!modelAssemblyMap.containsKey(modelId)) {
                             pendingModelQueue.add(Pair.of(new LazyModelAssembly(modelId, source), modelId));
                         }
@@ -217,6 +221,71 @@ public class ClientModelManager {
                 }
             });
         }
+    }
+
+    public static void enterClientOnlyMode() {
+        if (!ClientOnlyMode.markCatalogLoaded()) return;
+        Minecraft.getInstance().execute(() -> syncState.setState(SyncState.LOADING));
+        YSMThreadPool.submit(() -> {
+            try {
+                if (ServerModelManager.canReuseLoadedModels()) {
+                    registerClientOnlyCatalog();
+                    return;
+                }
+                ServerModelManager.loadModels(result -> {
+                    if (result.isSuccess()) {
+                        registerClientOnlyCatalog();
+                    } else {
+                        YesSteveModel.LOGGER.error("[YSM] Client-only model loading failed: " + result.getErrorMessage().getString(256));
+                        Minecraft.getInstance().execute(() -> syncState.setState(SyncState.IDLE));
+                    }
+                }, null);
+            } catch (Exception e) {
+                YesSteveModel.LOGGER.error("[YSM] Failed to enter client-only mode", e);
+                Minecraft.getInstance().execute(() -> syncState.setState(SyncState.IDLE));
+            }
+        });
+    }
+
+    private static void registerClientOnlyCatalog() {
+        Map<String, ServerModelData> serverModelInfo = ServerModelManager.getServerModelInfo();
+        int total = serverModelInfo == null ? 0 : serverModelInfo.size();
+        Minecraft.getInstance().execute(() -> {
+            if (total > 0) {
+                syncState.startSyncing(total);
+            }
+            forEachGuiWidget(guiWidget -> guiWidget.onSyncProgress(total, 0));
+        });
+        registerLocalModelPacks();
+        Minecraft.getInstance().execute(() -> {
+            registerLocalModelCatalog();
+            if (!isLazyModelLoadingEnabled()) {
+                requestAllLazyModels();
+            }
+            if (!NetworkHandler.isClientConnected()) {
+                syncState.setState(SyncState.IDLE);
+            }
+            Map<String, ModelAssembly> models = modelAssemblyMap;
+            forEachGuiWidget(guiWidget -> {
+                guiWidget.onModelsUpdated(models);
+                guiWidget.onSyncComplete();
+            });
+            applyClientOnlySelection();
+            YesSteveModel.LOGGER.info("[YSM] Client-only catalog registered, " + models.size() + " model(s) available.");
+        });
+    }
+
+    public static void applyClientOnlySelection() {
+        if (!ClientOnlyMode.isActive() || !ClientOnlySelection.hasSelection()) return;
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null) return;
+        String modelId = ClientOnlySelection.getModelId();
+        if (!modelAssemblyMap.containsKey(modelId)) return;
+        PlayerCapability.get(player).ifPresent(cap -> {
+            if (!modelId.equals(cap.getModelId()) || !ClientOnlySelection.getTextureId().equals(cap.getCurrentTextureName())) {
+                cap.initModelWithTexture(modelId, ClientOnlySelection.getTextureId());
+            }
+        });
     }
 
     private static void processServerData(ByteBuffer data) {
@@ -310,7 +379,7 @@ public class ClientModelManager {
         int unkSize = buf.readVarInt();
         onSyncProgress(unkSize);
 
-        if (useLocalModelCatalog) {
+        if (useLocalModelCatalog || ClientOnlyMode.isForced()) {
             registerLocalModelCatalog();
         }
 
@@ -334,6 +403,11 @@ public class ClientModelManager {
             ServerModelContext ctx = new ServerModelContext(hash1, hash2, modelId, isAuth, isCustomSkinModel, version, generation);
             serverModels.put(ctx.uuid, ctx);
             validServerModelIds.add(modelId);
+
+            if (ClientOnlyMode.isForced() && localOnlyModelIds.contains(modelId)) {
+                YesSteveModel.LOGGER.info("[YSM] Model id '{}' exists locally, keeping the local copy and ignoring the server one.", modelId);
+                continue;
+            }
 
             boolean alreadyInMemory = modelAssemblyMap != null && modelAssemblyMap.containsKey(modelId);
 
@@ -414,6 +488,7 @@ public class ClientModelManager {
         if (modelAssemblyMap != null) {
             for (String loadedId : modelAssemblyMap.keySet()) {
                 if ("default".equals(loadedId)) continue;
+                if (ClientOnlyMode.isForced() && localOnlyModelIds.contains(loadedId)) continue;
 
                 if (!validServerModelIds.contains(loadedId)) {
                     modelsToRemove.add(loadedId);
@@ -617,6 +692,7 @@ public class ClientModelManager {
         cachedModelHashes.clear();
         removeLazyLocalModels();
         lazyModelSources.clear();
+        localOnlyModelIds.clear();
         loadingLazyModels.clear();
         synchronized (loadedLocalModelAccessLock) {
             loadedLocalModelAccess.clear();
@@ -748,6 +824,7 @@ public class ClientModelManager {
     public static void resetSync() {
         isOysmServer = false;
         allowUpload = false;
+        ClientOnlyMode.reset();
         processServerData(null);
         NetworkHandler.resetClientHandshake();
         Minecraft.getInstance().execute(() -> {
@@ -816,6 +893,26 @@ public class ClientModelManager {
         }
     }
 
+    private static void registerLocalModelPacks() {
+        Map<String, ServerModelManager.ServerPackData> packs = ServerModelManager.getPacks();
+        if (packs == null || packs.isEmpty()) return;
+        List<ModelPackData> parsedPacks = new ArrayList<>();
+        for (ServerModelManager.ServerPackData pack : packs.values()) {
+            OuterFileTexture iconTexture = null;
+            if (pack.iconData != null) {
+                try {
+                    iconTexture = YSMClientMapper.toTexture(pack.iconData, pack.iconFormat, pack.iconWidth, pack.iconHeight);
+                } catch (Exception e) {
+                    YesSteveModel.LOGGER.error("[YSM] Failed to decode pack icon: " + pack.folderPath, e);
+                }
+            }
+            parsedPacks.add(new ModelPackData(pack.folderPath, pack.name != null ? pack.name : "", pack.description != null ? pack.description : "", iconTexture, pack.lang != null ? pack.lang : new HashMap<>()));
+        }
+        if (!parsedPacks.isEmpty()) {
+            onModelPacksReceived(parsedPacks.toArray(new ModelPackData[0]));
+        }
+    }
+
     private static void onModelPacksReceived(ModelPackData[] packDataArr) {
         Object2ReferenceOpenHashMap<String, ModelPackData> newPackMap = new Object2ReferenceOpenHashMap<>();
 
@@ -850,6 +947,7 @@ public class ClientModelManager {
                 for (String str : removedModelIds) {
                     ModelAssembly assembly = map.remove(str);
                     lazyModelSources.remove(str);
+                    localOnlyModelIds.remove(str);
                     loadingLazyModels.remove(str);
                     synchronized (loadedLocalModelAccessLock) {
                         loadedLocalModelAccess.remove(str);
@@ -943,11 +1041,12 @@ public class ClientModelManager {
                 return;
             }
         }
+        int generation = modelLoadGeneration.get();
         Minecraft.getInstance().execute(() -> {
-            if (syncState.currentState == SyncState.SYNCING) {
-                syncState.syncedModels++;
+            if (generation == modelLoadGeneration.get() && syncState.currentState == SyncState.SYNCING) {
+                syncState.syncedModels = Math.min(syncState.syncedModels + 1, syncState.totalModels);
                 int loaded = syncState.syncedModels;
-                if (loaded == syncState.totalModels) {
+                if (loaded >= syncState.totalModels) {
                     syncState.setState(SyncState.IDLE);
                 }
                 forEachGuiWidget(guiWidget -> {
@@ -1069,10 +1168,13 @@ public class ClientModelManager {
 
     public static void updateModelLoadingMode() {
         boolean enabled = isLazyModelLoadingEnabled();
-        if (lastLazyModelLoading != null && lastLazyModelLoading == enabled) return;
+        boolean firstCall = lastLazyModelLoading == null;
+        if (!firstCall && lastLazyModelLoading == enabled) return;
         lastLazyModelLoading = enabled;
-        modelLoadGeneration.incrementAndGet();
-        loadingLazyModels.clear();
+        if (!firstCall) {
+            modelLoadGeneration.incrementAndGet();
+            loadingLazyModels.clear();
+        }
         if (!enabled) {
             requestAllLazyModels();
             return;

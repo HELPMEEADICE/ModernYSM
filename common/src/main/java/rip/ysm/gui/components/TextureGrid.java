@@ -1,6 +1,8 @@
 package rip.ysm.gui.components;
 
 import com.elfmcys.yesstevemodel.capability.PlayerCapability;
+import com.elfmcys.yesstevemodel.client.ClientOnlyMode;
+import com.elfmcys.yesstevemodel.client.ClientOnlySelection;
 import com.elfmcys.yesstevemodel.client.entity.PlayerPreviewEntity;
 import com.elfmcys.yesstevemodel.client.gui.ModelMetadataPresenter;
 import com.elfmcys.yesstevemodel.client.renderer.ModelPreviewRenderer;
@@ -151,7 +153,12 @@ public final class TextureGrid extends OptionRow<Object> {
         if (mc.player == null) return;
         PlayerCapability.get(mc.player).ifPresent(cap -> {
             cap.setCurrentTexture(name);
-            NetworkHandler.sendToServer(new C2SRequestSwitchModelPacket(owner.modelId, name));
+            if (NetworkHandler.isClientConnected() && !ClientOnlyMode.isForced()) {
+                NetworkHandler.sendToServer(new C2SRequestSwitchModelPacket(owner.modelId, name));
+                return;
+            }
+            cap.initModelWithTexture(owner.modelId, name);
+            ClientOnlySelection.save(owner.modelId, name);
         });
     }
 }

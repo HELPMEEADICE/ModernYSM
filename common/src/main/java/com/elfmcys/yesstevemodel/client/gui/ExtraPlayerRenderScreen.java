@@ -42,7 +42,7 @@ public class ExtraPlayerRenderScreen extends Screen {
         this.mouseStartY = ExtraPlayerRenderConfig.PLAYER_POS_Y.get().intValue();
         this.rotationX = ExtraPlayerRenderConfig.PLAYER_SCALE.get().floatValue();
         this.rotationY = ExtraPlayerRenderConfig.PLAYER_YAW_OFFSET.get().floatValue();
-        if (PauseScreenButtonBuilder.isServerConnected()) {
+        if (PauseScreenButtonBuilder.isAndroid()) {
             this.offsetX = 16;
             this.offsetY = 0;
         }
@@ -51,7 +51,7 @@ public class ExtraPlayerRenderScreen extends Screen {
     public void init() {
         clearWidgets();
         int i = -30;
-        if (PauseScreenButtonBuilder.isServerConnected()) {
+        if (PauseScreenButtonBuilder.isAndroid()) {
             addRenderableWidget(Button.builder(Component.translatable("controls.reset"), button -> {
                 resetTransform();
             }).bounds((this.width / 2) - 50, this.height - 35, 100, 30).build());

@@ -18,8 +18,8 @@ import dev.architectury.event.events.client.ClientRawInputEvent;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import rip.ysm.api.client.KeyMappingFactory;
 import rip.ysm.api.PlatformAPI;
+import rip.ysm.api.client.KeyMappingFactory;
 
 import java.util.List;
 
@@ -70,7 +70,11 @@ public final class ExtraAnimationKey {
                     if (map.size() > index) {
                         String rouletteKey = map.getKeyAt(index);
                         if ("#return".equals(rouletteKey)) {
-                            NetworkHandler.sendToServer(C2SPlayAnimationPacket.createDefault());
+                            if (NetworkHandler.isClientConnected()) {
+                                NetworkHandler.sendToServer(C2SPlayAnimationPacket.createDefault());
+                            } else {
+                                cap.requestModelSwitch(StringPool.EMPTY);
+                            }
                             return;
                         }
                         if (rouletteKey.startsWith("#") && modelProperties.getExtraAnimationClassify().containsKey(rouletteKey.substring(1))) {
@@ -78,7 +82,11 @@ public final class ExtraAnimationKey {
                             Minecraft.getInstance().setScreen(new AnimationRouletteScreen(modelProperties.getExtraAnimationButtons(), modelProperties.getExtraAnimationClassify(), modelAssembly, cap));
                             return;
                         }
-                        NetworkHandler.sendToServer(new C2SPlayAnimationPacket(index, StringPool.EMPTY));
+                        if (NetworkHandler.isClientConnected()) {
+                            NetworkHandler.sendToServer(new C2SPlayAnimationPacket(index, StringPool.EMPTY));
+                        } else {
+                            cap.requestModelSwitch(rouletteKey);
+                        }
                     }
                 });
                 return;

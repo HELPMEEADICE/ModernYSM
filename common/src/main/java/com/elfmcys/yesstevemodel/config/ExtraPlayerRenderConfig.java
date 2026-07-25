@@ -6,6 +6,8 @@ public class ExtraPlayerRenderConfig {
 
     public static ForgeConfigSpec.BooleanValue DISABLE_PLAYER_RENDER;
 
+    public static ForgeConfigSpec.BooleanValue DISABLE_PLAYER_RENDER_THIRD_PERSON;
+
     public static ForgeConfigSpec.IntValue PLAYER_POS_X;
 
     public static ForgeConfigSpec.IntValue PLAYER_POS_Y;
@@ -18,6 +20,8 @@ public class ExtraPlayerRenderConfig {
         builder.push("extra_player_render");
         builder.comment("Whether to display player");
         DISABLE_PLAYER_RENDER = builder.define("DisablePlayerRender", false);
+        builder.comment("Hide the HUD model preview while in third person view");
+        DISABLE_PLAYER_RENDER_THIRD_PERSON = builder.define("DisablePlayerRenderThirdPerson", false);
         builder.comment("Player position x in screen");
         PLAYER_POS_X = builder.defineInRange("PlayerPosX", 10, 0, Integer.MAX_VALUE);
         builder.comment("Player position y in screen");

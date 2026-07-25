@@ -1,6 +1,7 @@
 package com.elfmcys.yesstevemodel.network.message;
 
 import com.elfmcys.yesstevemodel.client.ClientModelManager;
+import com.elfmcys.yesstevemodel.client.ClientOnlyMode;
 import com.elfmcys.yesstevemodel.network.NetworkHandler;
 import net.minecraft.network.FriendlyByteBuf;
 import rip.ysm.api.network.PacketContext;
@@ -47,7 +48,10 @@ public class S2CVersionCheckPacket {
     public static void handle(S2CVersionCheckPacket message, PacketContext ctx) {
         NetworkHandler.setServerSupportsModelSyncFragments(message.supportsModelSyncFragments);
         if (NetworkHandler.setChannelVersion(ctx.getConnection(), message.version)) {
-            ctx.enqueueWork(ClientModelManager::onSyncConnected);
+            ctx.enqueueWork(() -> {
+                ClientOnlyMode.leaveStandalone();
+                ClientModelManager.onSyncConnected();
+            });
         }
         if (NetworkHandler.VERSION.equals(message.version)) {
             NetworkHandler.markClientHandshakeComplete();

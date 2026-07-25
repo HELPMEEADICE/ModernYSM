@@ -1,9 +1,11 @@
 package com.elfmcys.yesstevemodel.network.message;
 
 import com.elfmcys.yesstevemodel.capability.PlayerCapability;
+import com.elfmcys.yesstevemodel.client.ClientOnlyMode;
 import com.elfmcys.yesstevemodel.event.EntityJoinCallbackEvent;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.entity.Entity;
 import rip.ysm.api.network.PacketContext;
@@ -48,9 +50,12 @@ public class S2CSetModelAndTexturePacket {
 
     @Environment(EnvType.CLIENT)
     public static void applyOnClient(Entity entity, S2CSetModelAndTexturePacket other) {
+        boolean keepLocalModel = ClientOnlyMode.isForced() && entity == Minecraft.getInstance().player;
         PlayerCapability.get(entity).ifPresent(cap -> {
-            cap.initModelWithTexture(other.modelId, other.textureId);
-            cap.setForceDisabled(other.disabled);
+            if (!keepLocalModel) {
+                cap.initModelWithTexture(other.modelId, other.textureId);
+                cap.setForceDisabled(other.disabled);
+            }
             S2CSyncPlayerStatePacket.handleCapability(entity, other.entityModelSync);
         });
     }

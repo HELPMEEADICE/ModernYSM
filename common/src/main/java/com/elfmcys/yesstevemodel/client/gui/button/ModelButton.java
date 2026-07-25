@@ -3,19 +3,21 @@ package com.elfmcys.yesstevemodel.client.gui.button;
 import com.elfmcys.yesstevemodel.YesSteveModel;
 import com.elfmcys.yesstevemodel.capability.PlayerCapability;
 import com.elfmcys.yesstevemodel.capability.StarModelsCapability;
-import com.elfmcys.yesstevemodel.resource.models.Metadata;
+import com.elfmcys.yesstevemodel.client.ClientOnlyMode;
+import com.elfmcys.yesstevemodel.client.ClientOnlySelection;
 import com.elfmcys.yesstevemodel.client.animation.AnimationTracker;
 import com.elfmcys.yesstevemodel.client.entity.PlayerPreviewEntity;
-import com.elfmcys.yesstevemodel.client.model.ModelAssembly;
 import com.elfmcys.yesstevemodel.client.gui.ModelMetadataPresenter;
-import com.elfmcys.yesstevemodel.client.upload.UploadManager;
+import com.elfmcys.yesstevemodel.client.model.ModelAssembly;
 import com.elfmcys.yesstevemodel.client.renderer.ModelPreviewRenderer;
 import com.elfmcys.yesstevemodel.client.renderer.RendererManager;
+import com.elfmcys.yesstevemodel.client.upload.IResourceLocatable;
+import com.elfmcys.yesstevemodel.client.upload.UploadManager;
 import com.elfmcys.yesstevemodel.config.GeneralConfig;
 import com.elfmcys.yesstevemodel.geckolib3.core.builder.Animation;
-import com.elfmcys.yesstevemodel.client.upload.IResourceLocatable;
 import com.elfmcys.yesstevemodel.network.NetworkHandler;
 import com.elfmcys.yesstevemodel.network.message.C2SRequestSwitchModelPacket;
+import com.elfmcys.yesstevemodel.resource.models.Metadata;
 import com.elfmcys.yesstevemodel.util.FileTypeUtil;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -133,7 +135,7 @@ public class ModelButton extends Button {
         LocalPlayer localPlayer;
         if (!this.isStarred && (localPlayer = Minecraft.getInstance().player) != null) {
             PlayerCapability.get(localPlayer).ifPresent(cap -> {
-                if (NetworkHandler.isClientConnected()) {
+                if (NetworkHandler.isClientConnected() && !ClientOnlyMode.isForced()) {
                     if (cap.hasMolangVars(this.modelIdHolder.getModelAssembly().getModelData().getHashId())) {
                         cap.initModelWithTexture(this.modelIdHolder.getModelId(), this.modelIdHolder.getCurrentTextureName());
                         NetworkHandler.sendToServer(new C2SRequestSwitchModelPacket(cap.getModelId(), cap.getCurrentTextureName()));
@@ -144,6 +146,7 @@ public class ModelButton extends Button {
                     }
                 }
                 cap.initModelWithTexture(this.modelIdHolder.getModelId(), this.modelIdHolder.getCurrentTextureName());
+                ClientOnlySelection.save(this.modelIdHolder.getModelId(), this.modelIdHolder.getCurrentTextureName());
             });
         }
     }

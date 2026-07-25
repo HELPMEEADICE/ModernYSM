@@ -34,6 +34,10 @@ public class GeneralConfig {
 
     public static ForgeConfigSpec.BooleanValue LAZY_MODEL_LOADING;
 
+    public static ForgeConfigSpec.BooleanValue FORCE_CLIENT_MODE;
+
+    public static ForgeConfigSpec.DoubleValue HANDSHAKE_TIMEOUT;
+
     public static ForgeConfigSpec.EnumValue<RouletteSettingsMode> ROULETTE_SETTINGS_MODE;
 
     public static ForgeConfigSpec.EnumValue<RouletteMode> ROULETTE_MODE;
@@ -100,6 +104,10 @@ public class GeneralConfig {
         builder.comment("Test renderer.");
         USE_GPU_RENDERER = builder.define("UseGpuRenderer", true);
         LAZY_MODEL_LOADING = builder.define("LazyModelLoading", true);
+        builder.comment("Always use client-only mode");
+        FORCE_CLIENT_MODE = builder.define("ForceClientMode", false);
+        builder.comment("Seconds to wait for the server to answer the handshake.");
+        HANDSHAKE_TIMEOUT = builder.defineInRange("HandshakeTimeout", 5.0d, 1.0d, 60.0d);
         ROULETTE_SETTINGS_MODE = builder.defineEnum("RouletteSettingsMode", RouletteSettingsMode.MODERN);
         ROULETTE_MODE = builder.defineEnum("RouletteMode", RouletteMode.CLASSIC);
         BLUR_GUI = builder.define("BlurGui", true);

@@ -6,6 +6,7 @@ import com.elfmcys.yesstevemodel.capability.AuthModelsCapability;
 import com.elfmcys.yesstevemodel.capability.PlayerCapability;
 import com.elfmcys.yesstevemodel.capability.StarModelsCapability;
 import com.elfmcys.yesstevemodel.client.ClientModelManager;
+import com.elfmcys.yesstevemodel.client.ClientOnlyMode;
 import com.elfmcys.yesstevemodel.client.entity.PlayerPreviewEntity;
 import com.elfmcys.yesstevemodel.client.gui.button.*;
 import com.elfmcys.yesstevemodel.client.input.PlayerModelToggleKey;
@@ -178,13 +179,14 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
             this.filteredPacks = buildFilteredPackMap();
         }
         if (this.category == Category.AUTH) {
-            AuthModelsCapability.get(localPlayer).ifPresent(cap -> {
-                for (Map.Entry<String, ModelAssembly> entry : ClientModelManager.getModelAssemblyMap().entrySet()) {
-                    if (cap.containsModel(entry.getKey()) || !entry.getValue().getTextureRegistry().isAuthModel()) {
-                        this.filteredModels.put(entry.getKey(), entry.getValue());
-                    }
+            Optional<AuthModelsCapability> authCap = AuthModelsCapability.get(localPlayer);
+            boolean allowAll = ClientOnlyMode.isActive();
+            for (Map.Entry<String, ModelAssembly> entry : ClientModelManager.getModelAssemblyMap().entrySet()) {
+                boolean owned = authCap.map(cap -> cap.containsModel(entry.getKey())).orElse(false);
+                if (allowAll || owned || !entry.getValue().getTextureRegistry().isAuthModel()) {
+                    this.filteredModels.put(entry.getKey(), entry.getValue());
                 }
-            });
+            }
         }
         if (this.category == Category.STAR) {
             StarModelsCapability.get(localPlayer).ifPresent(cap2 -> {
@@ -438,13 +440,13 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
                 String str2 = this.sortedModelKeys.get(size);
                 PlayerPreviewEntity previewEntity = previewHolders[i];
                 previewEntity.resetModel();
-                capability.ifPresent(value3 -> {
-                    ModelAssembly modelAssembly2 = this.filteredModels.get(str2);
-                    boolean isAuthLocked = modelAssembly2.getTextureRegistry().isAuthModel() && !value3.getAuthModels().contains(str2);
+                ModelAssembly modelAssembly2 = this.filteredModels.get(str2);
+                if (modelAssembly2 != null) {
+                    boolean isAuthLocked = !ClientOnlyMode.isActive() && modelAssembly2.getTextureRegistry().isAuthModel() && capability.map(cap -> !cap.getAuthModels().contains(str2)).orElse(true);
                     previewEntity.initModelWithTexture(str2, modelAssembly2.getAnimationBundle().getDefaultTextureName());
                     previewEntity.getAnimationStateMachine().setCurrentAnimation(modelAssembly2.getModelData().getModelProperties().getPreviewAnimation());
                     addRenderableWidget(createModelButton(slotX, slotY, isAuthLocked, previewEntity, modelAssembly2));
-                });
+                }
             }
         }
     }

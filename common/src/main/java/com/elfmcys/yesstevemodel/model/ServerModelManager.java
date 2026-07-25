@@ -44,6 +44,7 @@ import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import rip.ysm.api.PlatformAPI;
 import rip.ysm.legacy.YesModelUtils;
 import rip.ysm.security.YSMByteBuf;
 import rip.ysm.security.YsmCrypt;
@@ -1144,7 +1145,9 @@ public final class ServerModelManager {
                     PlayerSyncState state = new PlayerSyncState();
                     syncStates.put(uuid, state);
                     state.allowedModels.clear();
-                    state.allowedModels.addAll(CACHE_NAME_INFO.values());
+                    if (!shouldHideModelsFrom(uuid)) {
+                        state.allowedModels.addAll(CACHE_NAME_INFO.values());
+                    }
                     state.step = 1;
 
                     // HandshakePing
@@ -1180,6 +1183,17 @@ public final class ServerModelManager {
         });
     }
 
+    public static boolean isClientOnlyHost() {
+        if (PlatformAPI.isServer()) {
+            return false;
+        }
+        return ClientOnlyHostBridge.isActive();
+    }
+
+    private static boolean shouldHideModelsFrom(UUID uuid) {
+        return isClientOnlyHost() && !ClientOnlyHostBridge.isLocalHost(uuid);
+    }
+
     private static void sendPacket03(UUID uuid, PlayerSyncState state) {
         int garbageLen = 16 + theRandom.nextInt(48);
         byte[] garbage = new byte[garbageLen];
@@ -1206,8 +1220,9 @@ public final class ServerModelManager {
                 outBuf.writeVarInt(32); // format
             }
 
-            outBuf.writeVarInt(packs.size());
-            for (ServerPackData pack : packs.values()) {
+            Collection<ServerPackData> visiblePacks = shouldHideModelsFrom(uuid) ? List.of() : packs.values();
+            outBuf.writeVarInt(visiblePacks.size());
+            for (ServerPackData pack : visiblePacks) {
                 outBuf.writeString(pack.folderPath);
 
                 // 寫入圖標資訊
@@ -1257,6 +1272,7 @@ public final class ServerModelManager {
     }
 
     private static void sendPacket05(UUID uuid, PlayerSyncState state, List<long[]> requestedHashes) {
+        if (shouldHideModelsFrom(uuid)) return;
         YSMThreadPool.submitSync(() -> {
             boolean permitAcquired = false;
             try {

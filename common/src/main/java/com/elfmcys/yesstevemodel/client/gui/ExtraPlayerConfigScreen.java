@@ -24,10 +24,13 @@ public class ExtraPlayerConfigScreen extends OptionScreen {
                 .add(new SliderOptionRow(0, 0, 0, 22, Option.ofDouble("sound_volume", GeneralConfig.SOUND_VOLUME), 0.0d, 100.0d, 1.0d, "%"))
                 .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("disable_self_model", GeneralConfig.DISABLE_SELF_MODEL)))
                 .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("disable_other_model", GeneralConfig.DISABLE_OTHER_MODEL)))
-                .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("disable_self_hands", GeneralConfig.DISABLE_SELF_HANDS)));
+                .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("disable_self_hands", GeneralConfig.DISABLE_SELF_HANDS)))
+                .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("force_client_mode", GeneralConfig.FORCE_CLIENT_MODE)))
+                .add(new SliderOptionRow(0, 0, 0, 22, Option.ofDouble("handshake_timeout", GeneralConfig.HANDSHAKE_TIMEOUT), 1.0d, 60.0d, 1.0d, "s"));
 
         OptionGroup rendering = new OptionGroup("rendering")
                 .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("disable_player_render", ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER)))
+                .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("disable_player_render_third_person", ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER_THIRD_PERSON)))
                 .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("disable_projectile_model", GeneralConfig.DISABLE_PROJECTILE_MODEL)))
                 .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("disable_vehicle_model", GeneralConfig.DISABLE_VEHICLE_MODEL)))
                 .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("disable_external_first_person_anim", GeneralConfig.DISABLE_EXTERNAL_FP_ANIM)));

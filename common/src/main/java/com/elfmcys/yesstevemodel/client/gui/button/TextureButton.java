@@ -1,9 +1,11 @@
 package com.elfmcys.yesstevemodel.client.gui.button;
 
 import com.elfmcys.yesstevemodel.capability.PlayerCapability;
+import com.elfmcys.yesstevemodel.client.ClientOnlyMode;
+import com.elfmcys.yesstevemodel.client.ClientOnlySelection;
 import com.elfmcys.yesstevemodel.client.entity.PlayerPreviewEntity;
-import com.elfmcys.yesstevemodel.client.model.ModelAssembly;
 import com.elfmcys.yesstevemodel.client.gui.ModelMetadataPresenter;
+import com.elfmcys.yesstevemodel.client.model.ModelAssembly;
 import com.elfmcys.yesstevemodel.client.renderer.ModelPreviewRenderer;
 import com.elfmcys.yesstevemodel.client.renderer.RendererManager;
 import com.elfmcys.yesstevemodel.network.NetworkHandler;
@@ -38,7 +40,12 @@ public class TextureButton extends Button {
         if (localPlayer != null) {
             PlayerCapability.get(localPlayer).ifPresent(cap -> {
                 cap.setCurrentTexture(this.previewEntity.getCurrentTextureName());
-                NetworkHandler.sendToServer(new C2SRequestSwitchModelPacket(this.previewEntity.getModelId(), this.previewEntity.getCurrentTextureName()));
+                if (NetworkHandler.isClientConnected() && !ClientOnlyMode.isForced()) {
+                    NetworkHandler.sendToServer(new C2SRequestSwitchModelPacket(this.previewEntity.getModelId(), this.previewEntity.getCurrentTextureName()));
+                    return;
+                }
+                cap.initModelWithTexture(this.previewEntity.getModelId(), this.previewEntity.getCurrentTextureName());
+                ClientOnlySelection.save(this.previewEntity.getModelId(), this.previewEntity.getCurrentTextureName());
             });
         }
     }

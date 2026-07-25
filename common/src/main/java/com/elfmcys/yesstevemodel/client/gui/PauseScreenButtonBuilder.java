@@ -14,13 +14,13 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 
 public class PauseScreenButtonBuilder {
-    public static boolean isServerConnected() {
+    public static boolean isAndroid() {
         return YesSteveModel.isOnAndroid();
     }
 
     @Nullable
     public static List<Button> createButtons(PauseScreen pauseScreen) {
-        if (isServerConnected()) {
+        if (isAndroid()) {
             Minecraft minecraft = Minecraft.getInstance();
             Button buttonBuild = Button.builder(Component.translatable("gui.yes_steve_model.skin"), button -> {
                 if (GeneralConfig.DISCLAIMER_SHOW.get()) {
