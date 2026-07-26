@@ -17,7 +17,14 @@ import org.jetbrains.annotations.Nullable;
 import rip.ysm.api.network.PacketDirection;
 import rip.ysm.api.network.YSMChannel;
 
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 public final class NetworkHandler {
+
+    private static final Set<UUID> clientsSupportingModelSyncFragments = ConcurrentHashMap.newKeySet();
 
     public static final String VERSION = "2.6.0";
 
@@ -126,6 +133,25 @@ public final class NetworkHandler {
 
     public static Packet<?> toClientboundPacket(Object obj) {
         return YSMChannel.toClientboundPacket(obj);
+    }
+
+    public static List<Packet<?>> toClientboundPackets(Object obj, UUID receiver) {
+        if (!clientsSupportingModelSyncFragments.contains(receiver)) {
+            return List.of(YSMChannel.toClientboundPacket(obj));
+        }
+        return YSMChannel.toClientboundPackets(obj);
+    }
+
+    public static void setClientSupportsModelSyncFragments(UUID uuid, boolean supported) {
+        if (supported) {
+            clientsSupportingModelSyncFragments.add(uuid);
+        } else {
+            clientsSupportingModelSyncFragments.remove(uuid);
+        }
+    }
+
+    public static void clearClientModelSyncFragments(UUID uuid) {
+        clientsSupportingModelSyncFragments.remove(uuid);
     }
 
     public static Packet<?> toServerboundPacket(Object obj) {

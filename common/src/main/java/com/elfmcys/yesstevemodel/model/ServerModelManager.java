@@ -1543,7 +1543,12 @@ public final class ServerModelManager {
     private static boolean sendModelData(UUID uuid, ByteBuffer byteBuffer, PendingTransfer pendingTransfer) {
         Connection connection = getPlayerConnection(uuid);
         if (connection != null) {
-            return sendPacketReliably(connection, NetworkHandler.toClientboundPacket(new S2CModelSyncPayload(byteBuffer)), pendingTransfer);
+            for (Packet<?> packet : NetworkHandler.toClientboundPackets(new S2CModelSyncPayload(byteBuffer), uuid)) {
+                if (!sendPacketReliably(connection, packet, pendingTransfer)) {
+                    return false;
+                }
+            }
+            return true;
         }
         return false;
     }

@@ -8,6 +8,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 
+import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -53,6 +54,11 @@ public final class YSMChannel {
 
     @ExpectPlatform
     public static Packet<?> toClientboundPacket(Object packet) {
+        throw new AssertionError();
+    }
+
+    @ExpectPlatform
+    public static List<Packet<?>> toClientboundPackets(Object packet) {
         throw new AssertionError();
     }
 

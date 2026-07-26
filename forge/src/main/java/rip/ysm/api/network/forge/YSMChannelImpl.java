@@ -1,9 +1,9 @@
 package rip.ysm.api.network.forge;
 
-import io.netty.buffer.Unpooled;
-import com.elfmcys.yesstevemodel.network.message.C2SModelSyncPayload;
 import com.elfmcys.yesstevemodel.mixin.ConnectionAccessor;
 import com.elfmcys.yesstevemodel.network.NetworkHandler;
+import com.elfmcys.yesstevemodel.network.message.C2SModelSyncPayload;
+import io.netty.buffer.Unpooled;
 import net.minecraft.network.Connection;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.Packet;
@@ -19,10 +19,7 @@ import rip.ysm.api.network.PacketContext;
 import rip.ysm.api.network.PacketDirection;
 
 import java.io.ByteArrayOutputStream;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
@@ -97,6 +94,23 @@ public final class YSMChannelImpl {
         return channel.toVanillaPacket(packet, NetworkDirection.PLAY_TO_CLIENT);
     }
 
+    public static List<Packet<?>> toClientboundPackets(Object packet) {
+        byte[] encoded = encode(packet);
+        if (encoded.length <= FRAGMENT_DATA_SIZE) {
+            return List.of(channel.toVanillaPacket(packet, NetworkDirection.PLAY_TO_CLIENT));
+        }
+        List<Packet<?>> packets = new ArrayList<>();
+        int transferId = nextTransferId.incrementAndGet();
+        int fragmentCount = (encoded.length + FRAGMENT_DATA_SIZE - 1) / FRAGMENT_DATA_SIZE;
+        for (int index = 0; index < fragmentCount; index++) {
+            int from = index * FRAGMENT_DATA_SIZE;
+            int to = Math.min(from + FRAGMENT_DATA_SIZE, encoded.length);
+            FragmentPacket fragment = new FragmentPacket(transferId, index, fragmentCount, Arrays.copyOfRange(encoded, from, to));
+            packets.add(channel.toVanillaPacket(fragment, NetworkDirection.PLAY_TO_CLIENT));
+        }
+        return packets;
+    }
+
     public static Packet<?> toServerboundPacket(Object packet) {
         return channel.toVanillaPacket(packet, NetworkDirection.PLAY_TO_SERVER);
     }
@@ -131,9 +145,7 @@ public final class YSMChannelImpl {
     }
 
     private static void handleFragment(FragmentPacket packet, PacketContext context) {
-        if (!context.isServerSide()) {
-            return;
-        }
+        PacketDirection expected = context.isServerSide() ? PacketDirection.PLAY_TO_SERVER : PacketDirection.PLAY_TO_CLIENT;
 
         long now = System.nanoTime();
         Connection connection = context.getConnection();
@@ -161,7 +173,7 @@ public final class YSMChannelImpl {
         try {
             int discriminator = buf.readUnsignedByte();
             LocalCodec<?> codec = codecs.get(discriminator);
-            if (codec == null || codec.direction != PacketDirection.PLAY_TO_SERVER) {
+            if (codec == null || codec.direction != expected) {
                 throw new IllegalArgumentException("Invalid fragmented YSM packet discriminator: " + discriminator);
             }
             codec.dispatch(buf, context);

@@ -1,6 +1,7 @@
 package rip.ysm.api.network.fabric;
 
 import com.elfmcys.yesstevemodel.mixin.ConnectionAccessor;
+import com.elfmcys.yesstevemodel.mixin.ServerCommonPacketListenerImplAccessor;
 import com.elfmcys.yesstevemodel.network.NetworkHandler;
 import com.elfmcys.yesstevemodel.network.message.C2SModelSyncPayload;
 import io.netty.buffer.Unpooled;
@@ -17,15 +18,12 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
-import com.elfmcys.yesstevemodel.mixin.ServerCommonPacketListenerImplAccessor;
 import rip.ysm.api.network.PacketContext;
 import rip.ysm.api.network.PacketDirection;
 import rip.ysm.api.network.fabric.client.YSMChannelClientImpl;
 
 import java.io.ByteArrayOutputStream;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
@@ -131,6 +129,28 @@ public final class YSMChannelImpl {
         return ServerPlayNetworking.createS2CPacket(channelId, encode(packet));
     }
 
+    public static List<Packet<?>> toClientboundPackets(Object packet) {
+        byte[] encoded = copyAndRelease(encode(packet));
+        if (encoded.length <= FRAGMENT_DATA_SIZE) {
+            return List.of(ServerPlayNetworking.createS2CPacket(channelId, new FriendlyByteBuf(Unpooled.wrappedBuffer(encoded))));
+        }
+        if (encoded.length > MAX_REASSEMBLED_SIZE) {
+            throw new IllegalArgumentException("Fragmented YSM packet exceeds maximum size");
+        }
+        List<Packet<?>> packets = new ArrayList<>();
+        int transferId = NEXT_TRANSFER_ID.incrementAndGet();
+        int fragmentCount = (encoded.length + FRAGMENT_DATA_SIZE - 1) / FRAGMENT_DATA_SIZE;
+        for (int index = 0; index < fragmentCount; index++) {
+            int from = index * FRAGMENT_DATA_SIZE;
+            int to = Math.min(from + FRAGMENT_DATA_SIZE, encoded.length);
+            FriendlyByteBuf fragment = new FriendlyByteBuf(Unpooled.buffer());
+            fragment.writeByte(FRAGMENT_DISCRIMINATOR);
+            FragmentPacket.encode(new FragmentPacket(transferId, index, fragmentCount, Arrays.copyOfRange(encoded, from, to)), fragment);
+            packets.add(ServerPlayNetworking.createS2CPacket(channelId, fragment));
+        }
+        return packets;
+    }
+
     public static Packet<?> toServerboundPacket(Object packet) {
         if (FabricLoader.getInstance().getEnvironmentType() != EnvType.CLIENT) {
             throw new IllegalStateException("toServerboundPacket can only be invoked from the client environment");
@@ -178,10 +198,6 @@ public final class YSMChannelImpl {
     }
 
     private static void handleFragment(FragmentPacket packet, PacketContext context) {
-        if (!context.isServerSide()) {
-            return;
-        }
-
         long now = System.nanoTime();
         Connection connection = context.getConnection();
         Map<Integer, FragmentAccumulator> newTransfers = new ConcurrentHashMap<>();
