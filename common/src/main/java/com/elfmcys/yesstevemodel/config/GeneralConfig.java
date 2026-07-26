@@ -38,6 +38,8 @@ public class GeneralConfig {
 
     public static ForgeConfigSpec.DoubleValue HANDSHAKE_TIMEOUT;
 
+    public static ForgeConfigSpec.DoubleValue SEARCH_SUGGESTION_COUNT;
+
     public static ForgeConfigSpec.EnumValue<RouletteSettingsMode> ROULETTE_SETTINGS_MODE;
 
     public static ForgeConfigSpec.EnumValue<RouletteMode> ROULETTE_MODE;
@@ -108,6 +110,8 @@ public class GeneralConfig {
         FORCE_CLIENT_MODE = builder.define("ForceClientMode", false);
         builder.comment("Seconds to wait for the server to answer the handshake.");
         HANDSHAKE_TIMEOUT = builder.defineInRange("HandshakeTimeout", 5.0d, 1.0d, 60.0d);
+        builder.comment("Maximum entries shown at search list.");
+        SEARCH_SUGGESTION_COUNT = builder.defineInRange("SearchSuggestionCount", 8.0d, 1.0d, 30.0d);
         ROULETTE_SETTINGS_MODE = builder.defineEnum("RouletteSettingsMode", RouletteSettingsMode.MODERN);
         ROULETTE_MODE = builder.defineEnum("RouletteMode", RouletteMode.CLASSIC);
         BLUR_GUI = builder.define("BlurGui", true);

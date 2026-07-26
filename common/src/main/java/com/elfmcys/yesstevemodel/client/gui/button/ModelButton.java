@@ -3,12 +3,14 @@ package com.elfmcys.yesstevemodel.client.gui.button;
 import com.elfmcys.yesstevemodel.YesSteveModel;
 import com.elfmcys.yesstevemodel.capability.PlayerCapability;
 import com.elfmcys.yesstevemodel.capability.StarModelsCapability;
+import com.elfmcys.yesstevemodel.client.ClientModelManager;
 import com.elfmcys.yesstevemodel.client.ClientOnlyMode;
 import com.elfmcys.yesstevemodel.client.ClientOnlySelection;
 import com.elfmcys.yesstevemodel.client.animation.AnimationTracker;
 import com.elfmcys.yesstevemodel.client.entity.PlayerPreviewEntity;
 import com.elfmcys.yesstevemodel.client.gui.ModelMetadataPresenter;
 import com.elfmcys.yesstevemodel.client.model.ModelAssembly;
+import com.elfmcys.yesstevemodel.client.model.PlayerModelBundle;
 import com.elfmcys.yesstevemodel.client.renderer.ModelPreviewRenderer;
 import com.elfmcys.yesstevemodel.client.renderer.RendererManager;
 import com.elfmcys.yesstevemodel.client.upload.IResourceLocatable;
@@ -22,6 +24,7 @@ import com.elfmcys.yesstevemodel.util.FileTypeUtil;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMap;
+import it.unimi.dsi.fastutil.objects.Object2ReferenceMaps;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -33,8 +36,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.util.Mth;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
+import rip.ysm.gpu.Pie;
 
 import java.util.List;
 import java.util.Objects;
@@ -63,6 +68,8 @@ public class ModelButton extends Button {
 
     private final Component displayName;
 
+    private final String targetModelId;
+
     @Nullable
     private IResourceLocatable backgroundTexture;
 
@@ -81,8 +88,13 @@ public class ModelButton extends Button {
     private long lastHoverTime;
 
     public ModelButton(int x, int y, boolean isAuthLocked, PlayerPreviewEntity playerPreviewEntity, ModelAssembly textureRegistry) {
+        this(x, y, isAuthLocked, playerPreviewEntity, textureRegistry, playerPreviewEntity.getModelId());
+    }
+
+    public ModelButton(int x, int y, boolean isAuthLocked, PlayerPreviewEntity playerPreviewEntity, ModelAssembly textureRegistry, String targetModelId) {
         super(x, y, 52, 90, createDisplayName(playerPreviewEntity, textureRegistry), button -> {
         }, DEFAULT_NARRATION);
+        this.targetModelId = targetModelId;
         this.backgroundTexture = null;
         this.foregroundTexture = null;
         this.tooltipLines = null;
@@ -96,20 +108,21 @@ public class ModelButton extends Button {
         this.displayName = Component.literal(FileTypeUtil.getNameWithoutArchiveExtension(playerPreviewEntity.getModelId()));
         this.backgroundTexture = textureRegistry.getTextureRegistry().getGuiBackground() == null ? null : UploadManager.getOrCreateLocatableWithSize(textureRegistry.getTextureRegistry().getGuiBackground(), true, 200);
         this.foregroundTexture = textureRegistry.getTextureRegistry().getGuiForeground() == null ? null : UploadManager.getOrCreateLocatableWithSize(textureRegistry.getTextureRegistry().getGuiForeground(), true, 200);
-        Object2ReferenceMap<String, Animation> object2ReferenceMapM3399xe6e508ff = textureRegistry.getAnimationBundle().getMainAnimations();
-        if (object2ReferenceMapM3399xe6e508ff.containsKey("hover")) {
+        PlayerModelBundle animationBundle = ClientModelManager.isModelPending(this.targetModelId) ? null : textureRegistry.getAnimationBundle();
+        Object2ReferenceMap<String, Animation> bundles = animationBundle == null ? Object2ReferenceMaps.emptyMap() : animationBundle.getMainAnimations();
+        if (bundles.containsKey("hover")) {
             this.modelId = "hover";
         } else {
             this.modelId = "empty";
         }
-        if (object2ReferenceMapM3399xe6e508ff.containsKey("hover_fadeout")) {
+        if (bundles.containsKey("hover_fadeout")) {
             this.modelName = "hover_fadeout";
-            this.animationDuration = object2ReferenceMapM3399xe6e508ff.get("hover_fadeout").animationLength * 50.0f;
+            this.animationDuration = bundles.get("hover_fadeout").animationLength * 50.0f;
         } else {
             this.modelName = "empty";
             this.animationDuration = 0.0d;
         }
-        if (object2ReferenceMapM3399xe6e508ff.containsKey("focus")) {
+        if (bundles.containsKey("focus")) {
             this.authorName = "focus";
         } else {
             this.authorName = "empty";
@@ -133,6 +146,9 @@ public class ModelButton extends Button {
 
     public void onPress() {
         LocalPlayer localPlayer;
+        if (ClientModelManager.isModelPending(this.targetModelId)) {
+            return;
+        }
         if (!this.isStarred && (localPlayer = Minecraft.getInstance().player) != null) {
             PlayerCapability.get(localPlayer).ifPresent(cap -> {
                 if (NetworkHandler.isClientConnected() && !ClientOnlyMode.isForced()) {
@@ -177,10 +193,14 @@ public class ModelButton extends Button {
             guiGraphics.blit(this.backgroundTexture.getResourceLocation().get(), x, y, 0.0f, 0.0f, this.width, this.height, this.width, this.height);
             RenderSystem.disableBlend();
         }
-        double guiScale = Minecraft.getInstance().getWindow().getGuiScale();
-        RenderSystem.enableScissor((int) (x * guiScale), (int) (Minecraft.getInstance().getWindow().getHeight() - (((y + this.height) - 20) * guiScale)), (int) (this.width * guiScale), (int) ((this.height - 20) * guiScale));
-        ModelPreviewRenderer.renderLivingEntityPreview(x + (this.width / 2.0f), y + (this.height / 2.0f) + 20.0f, 30.0f, minecraft.getFrameTime(), this.modelIdHolder, RendererManager.getPlayerRenderer(), this.disablePreviewRotation, true);
-        RenderSystem.disableScissor();
+        if (ClientModelManager.isModelPending(this.targetModelId)) {
+            drawLoading(guiGraphics, x + (this.width / 2.0f), y + ((this.height - 20) / 2.0f), 8.0f);
+        } else {
+            double guiScale = Minecraft.getInstance().getWindow().getGuiScale();
+            RenderSystem.enableScissor((int) (x * guiScale), (int) (Minecraft.getInstance().getWindow().getHeight() - (((y + this.height) - 20) * guiScale)), (int) (this.width * guiScale), (int) ((this.height - 20) * guiScale));
+            ModelPreviewRenderer.renderLivingEntityPreview(x + (this.width / 2.0f), y + (this.height / 2.0f) + 20.0f, 30.0f, minecraft.getFrameTime(), this.modelIdHolder, RendererManager.getPlayerRenderer(), this.disablePreviewRotation, true);
+            RenderSystem.disableScissor();
+        }
         int starZ = 3500;
         if (this.foregroundTexture != null) {
             RenderSystem.enableBlend();
@@ -211,6 +231,21 @@ public class ModelButton extends Button {
                 }
             });
         }
+    }
+
+    public static void drawLoading(GuiGraphics guiGraphics, float centerX, float centerY, float radius) {
+        float thickness = Math.max(1.5f, radius * 0.28f);
+        float inner = radius - thickness;
+        float time = (System.nanoTime() % 10_000_000_000L) / 1.0E9f;
+
+        Pie.draw(guiGraphics, centerX, centerY, inner, radius, 0.0f, Pie.tau, 0x33FFFFFF);
+
+        float sweepPhase = (time % 2.0f) / 2.0f;
+        float eased = 0.5f - 0.5f * Mth.cos(sweepPhase * Pie.tau);
+        float sweep = Mth.lerp(eased, 0.12f, 0.78f) * Pie.tau;
+        float start = ((time % 1.4f) / 1.4f) * Pie.tau + sweepPhase * Pie.tau;
+
+        Pie.draw(guiGraphics, centerX, centerY, inner, radius, start, start + sweep, 0xFFF3D08A);
     }
 
     public void renderTooltip(GuiGraphics guiGraphics, Screen screen, int mouseX, int mouseY) {

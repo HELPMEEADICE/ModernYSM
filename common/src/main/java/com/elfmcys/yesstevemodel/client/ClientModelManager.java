@@ -1437,6 +1437,14 @@ public class ClientModelManager {
         return pendingModelQueue.size();
     }
 
+    public static boolean isModelPending(String modelId) {
+        if (!(modelAssemblyMap.get(modelId) instanceof LazyModelAssembly)) {
+            return false;
+        }
+        requestLazyModel(modelId);
+        return true;
+    }
+
     public static class SyncStatus {
         private SyncState currentState = SyncState.WAITING;
 

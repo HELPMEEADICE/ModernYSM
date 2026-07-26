@@ -76,6 +76,8 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
 
     private EditBox searchBox;
 
+    private SearchSuggestions suggestions;
+
     private Category category;
 
     private static final PlayerPreviewEntity[] previewHolders = new PlayerPreviewEntity[10];
@@ -104,7 +106,11 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
     }
 
     public ModelButton createModelButton(int x, int y, boolean isAuthLocked, PlayerPreviewEntity previewEntity, ModelAssembly modelAssembly) {
-        return new ModelButton(x, y, isAuthLocked, previewEntity, modelAssembly);
+        return new ModelButton(x, y, isAuthLocked, previewEntity, modelAssembly, previewEntity.getModelId());
+    }
+
+    public ModelButton createModelButton(int x, int y, boolean isAuthLocked, PlayerPreviewEntity previewEntity, ModelAssembly modelAssembly, String targetModelId) {
+        return new ModelButton(x, y, isAuthLocked, previewEntity, modelAssembly, targetModelId);
     }
 
     public Screen createTextureScreen(PlayerModelScreen other, String str, ModelAssembly modelAssembly) {
@@ -155,6 +161,12 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
 
     private Map<String, ModelPackData> buildFilteredPackMap() {
         HashMap<String, ModelPackData> mapNewHashMap = Maps.newHashMap();
+        ClientModelManager.getModelAssemblyMap().keySet().forEach(str -> {
+            String parent = FileTypeUtil.splitFileNameAndParentDir(str).right();
+            if (StringUtils.isNotBlank(parent)) {
+                ensurePackHierarchy(parent, this.modelPackMap);
+            }
+        });
         if (StringUtils.isBlank(currentPath)) {
             return Maps.newHashMap(this.modelPackMap);
         }
@@ -217,7 +229,7 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
             });
             String str2 = lowerCase;
             this.filteredPacks.entrySet().removeIf(entry4 -> {
-                return shouldFilterPack(FileTypeUtil.splitFileNameAndParentDir(entry4.getKey()).left(), entry4.getValue(), str2);
+                return shouldFilterPack(FileTypeUtil.getFinalPathSegment(entry4.getKey()), entry4.getValue(), str2);
             });
         }
         this.sortedModelKeys = Lists.newArrayList(this.filteredModels.keySet());
@@ -338,6 +350,8 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
         this.searchBox.setTextColor(15986656);
         this.searchBox.setFocused(zIsFocused);
         this.searchBox.moveCursorToEnd();
+        this.suggestions = new SearchSuggestions(this.font, this.searchBox, this.modelPackMap, this.suggestions);
+        this.suggestions.refresh();
         addWidget(this.searchBox);
         addRenderableWidget(new IconButton(this.guiLeft + 5, this.guiTop + 5, 20, 20, 80, 16, button -> {
             if (Minecraft.getInstance().player != null) {
@@ -430,6 +444,7 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
                 getPackData(str).ifPresent(value2 -> {
                     addRenderableWidget(new PackIconButton(slotX, slotY, 52, 90, value2, button12 -> {
                         currentPath = str;
+                        clearSearch();
                         resetCurrentPage();
                         init();
                     }));
@@ -443,9 +458,11 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
                 ModelAssembly modelAssembly2 = this.filteredModels.get(str2);
                 if (modelAssembly2 != null) {
                     boolean isAuthLocked = !ClientOnlyMode.isActive() && modelAssembly2.getTextureRegistry().isAuthModel() && capability.map(cap -> !cap.getAuthModels().contains(str2)).orElse(true);
-                    previewEntity.initModelWithTexture(str2, modelAssembly2.getAnimationBundle().getDefaultTextureName());
-                    previewEntity.getAnimationStateMachine().setCurrentAnimation(modelAssembly2.getModelData().getModelProperties().getPreviewAnimation());
-                    addRenderableWidget(createModelButton(slotX, slotY, isAuthLocked, previewEntity, modelAssembly2));
+                    if (!ClientModelManager.isModelPending(str2)) {
+                        previewEntity.initModelWithTexture(str2, modelAssembly2.getAnimationBundle().getDefaultTextureName());
+                        previewEntity.getAnimationStateMachine().setCurrentAnimation(modelAssembly2.getModelData().getModelProperties().getPreviewAnimation());
+                    }
+                    addRenderableWidget(createModelButton(slotX, slotY, isAuthLocked, previewEntity, modelAssembly2, str2));
                 }
             }
         }
@@ -476,38 +493,133 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
         guiGraphics.pose().translate(0.0f, 0.0f, 1000.0f);
         guiGraphics.drawString(this.font, strVersionString + " (" + renderer + ")", this.guiLeft + 2, this.guiTop + 226, ChatFormatting.DARK_GRAY.getColor().intValue());
         guiGraphics.pose().popPose();
-        if (StringUtils.isNotBlank(currentPath)) {
-            int lineIndex = 0;
-            List listSplit = this.font.split(Component.literal("📂 " + currentPath).withStyle(ChatFormatting.GRAY), 270);
-            Iterator it = listSplit.iterator();
-            while (it.hasNext()) {
-                guiGraphics.drawString(this.font, (FormattedCharSequence) it.next(), this.guiLeft + 142, this.guiTop + (((-(listSplit.size() - lineIndex)) * 10) - 2), 15986656);
-                lineIndex++;
-            }
-        }
+        renderBreadcrumb(guiGraphics, mouseX, mouseY);
         renderSyncStatus(guiGraphics);
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        boolean occluded = this.suggestions != null && this.suggestions.isOccluding(mouseX, mouseY);
+        int hoverX = occluded ? -1000 : mouseX;
+        int hoverY = occluded ? -1000 : mouseY;
+        super.render(guiGraphics, hoverX, hoverY, partialTick);
         ((ScreenAccessor) this).ysm$getRenderables().stream().filter(renderable -> {
             return renderable instanceof IconButton;
         }).forEach(renderable2 -> {
-            ((IconButton) renderable2).renderTooltip(guiGraphics, this, mouseX, mouseY);
+            ((IconButton) renderable2).renderTooltip(guiGraphics, this, hoverX, hoverY);
         });
         ((ScreenAccessor) this).ysm$getRenderables().stream().filter(renderable3 -> {
             return renderable3 instanceof ModelButton;
         }).forEach(renderable4 -> {
-            ((ModelButton) renderable4).renderTooltip(guiGraphics, this, mouseX, mouseY);
+            ((ModelButton) renderable4).renderTooltip(guiGraphics, this, hoverX, hoverY);
         });
         ((ScreenAccessor) this).ysm$getRenderables().stream().filter(renderable5 -> {
             return renderable5 instanceof PackIconButton;
         }).forEach(renderable6 -> {
-            ((PackIconButton) renderable6).renderDescription(guiGraphics, this, mouseX, mouseY);
+            ((PackIconButton) renderable6).renderDescription(guiGraphics, this, hoverX, hoverY);
         });
-        if (this.searchBox.isHovered()) {
+        if (this.suggestions != null) {
+            this.suggestions.render(guiGraphics);
+        }
+        if (this.searchBox.isHovered() && (this.suggestions == null || !this.suggestions.isVisible())) {
             MutableComponent mutableComponentWithStyle = Component.translatable("gui.yes_steve_model.search.tip").withStyle(ChatFormatting.GRAY);
             guiGraphics.pose().pushPose();
             guiGraphics.pose().translate(0.0f, 0.0f, 4000.0f);
             guiGraphics.renderTooltip(this.font, this.font.split(mutableComponentWithStyle, 320), mouseX, mouseY);
             guiGraphics.pose().popPose();
+        }
+    }
+
+    private List<BreadcrumbSegment> buildBreadcrumb() {
+        List<BreadcrumbSegment> segments = Lists.newArrayList();
+        if (StringUtils.isBlank(currentPath)) {
+            return segments;
+        }
+        int x = this.guiLeft + 142;
+        int y = this.guiTop - 12;
+        segments.add(new BreadcrumbSegment("📂", StringPool.EMPTY, x, y, this.font.width("📂")));
+        x += this.font.width("📂 ");
+        StringBuilder path = new StringBuilder();
+        for (String part : currentPath.split("/")) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            path.append(part).append("/");
+            int width = this.font.width(part);
+            segments.add(new BreadcrumbSegment(part, path.toString(), x, y, width));
+            x += width;
+            x += this.font.width(" / ");
+        }
+        return segments;
+    }
+
+    private void renderBreadcrumb(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        List<BreadcrumbSegment> segments = buildBreadcrumb();
+        for (int i = 0; i < segments.size(); i++) {
+            BreadcrumbSegment segment = segments.get(i);
+            boolean hovered = segment.isClickable() && segment.contains(mouseX, mouseY);
+            guiGraphics.drawString(this.font, segment.label, segment.x, segment.y, hovered ? 16777120 : 15986656);
+            if (hovered) {
+                guiGraphics.fill(segment.x, segment.y + 9, segment.x + segment.width, segment.y + 10, 0xFFFFFF60);
+            }
+            if (i > 0 && i < segments.size() - 1) {
+                guiGraphics.drawString(this.font, "/", segment.x + segment.width + this.font.width(" "), segment.y, 7829367);
+            }
+        }
+    }
+
+    private void clearSearch() {
+        if (this.searchBox != null) {
+            this.searchBox.setValue(StringPool.EMPTY);
+            this.searchBox.setFocused(false);
+        }
+        if (this.suggestions != null) {
+            this.suggestions.suppress();
+        }
+    }
+
+    private void navigateToSuggestedPack() {
+        if (this.suggestions == null) {
+            return;
+        }
+        String packPath = this.suggestions.consumePendingPackPath();
+        if (packPath != null) {
+            Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0f));
+            currentPath = packPath;
+            clearSearch();
+        }
+    }
+
+    private boolean breadcrumbClicked(double mouseX, double mouseY) {
+        for (BreadcrumbSegment segment : buildBreadcrumb()) {
+            if (segment.isClickable() && segment.contains(mouseX, mouseY) && !segment.targetPath.equals(currentPath)) {
+                Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0f));
+                currentPath = segment.targetPath;
+                resetCurrentPage();
+                init();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static final class BreadcrumbSegment {
+        private final String label;
+        private final String targetPath;
+        private final int x;
+        private final int y;
+        private final int width;
+
+        private BreadcrumbSegment(String label, String targetPath, int x, int y, int width) {
+            this.label = label;
+            this.targetPath = targetPath;
+            this.x = x;
+            this.y = y;
+            this.width = width;
+        }
+
+        private boolean isClickable() {
+            return !this.targetPath.isEmpty() && !this.targetPath.equals(currentPath);
+        }
+
+        private boolean contains(double mouseX, double mouseY) {
+            return mouseX >= this.x && mouseX <= this.x + this.width && mouseY >= this.y && mouseY <= this.y + 9;
         }
     }
 
@@ -581,12 +693,24 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && this.suggestions != null && this.suggestions.mouseClicked(mouseX, mouseY)) {
+            navigateToSuggestedPack();
+            resetCurrentPage();
+            init();
+            return true;
+        }
+        if (button == 0 && breadcrumbClicked(mouseX, mouseY)) {
+            return true;
+        }
         if (this.searchBox.mouseClicked(mouseX, mouseY, button)) {
             setFocused(this.searchBox);
             return true;
         }
         if (this.searchBox.isFocused()) {
             this.searchBox.setFocused(false);
+            if (this.suggestions != null) {
+                this.suggestions.suppress();
+            }
         }
         boolean zMouseClicked = super.mouseClicked(mouseX, mouseY, button);
         if (!zMouseClicked && button == 1 && StringUtils.isNotBlank(currentPath)) {
@@ -615,6 +739,12 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (handleToggleKey(keyCode, scanCode, modifiers)) {
+            return true;
+        }
+        if (this.searchBox.isFocused() && this.suggestions != null && this.suggestions.keyPressed(keyCode)) {
+            navigateToSuggestedPack();
+            resetCurrentPage();
+            init();
             return true;
         }
         boolean zIsPresent = InputConstants.getKey(keyCode, scanCode).getNumericKeyValue().isPresent();
@@ -652,6 +782,9 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         if (this.minecraft == null) {
             return false;
+        }
+        if (this.suggestions != null && this.suggestions.mouseScrolled(mouseX, mouseY, delta)) {
+            return true;
         }
         if (delta != 0.0d && isInModelArea(mouseX, mouseY)) {
             return handleScrollPage(delta);

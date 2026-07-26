@@ -26,7 +26,8 @@ public class ExtraPlayerConfigScreen extends OptionScreen {
                 .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("disable_other_model", GeneralConfig.DISABLE_OTHER_MODEL)))
                 .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("disable_self_hands", GeneralConfig.DISABLE_SELF_HANDS)))
                 .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("force_client_mode", GeneralConfig.FORCE_CLIENT_MODE)))
-                .add(new SliderOptionRow(0, 0, 0, 22, Option.ofDouble("handshake_timeout", GeneralConfig.HANDSHAKE_TIMEOUT), 1.0d, 60.0d, 1.0d, "s"));
+                .add(new SliderOptionRow(0, 0, 0, 22, Option.ofDouble("handshake_timeout", GeneralConfig.HANDSHAKE_TIMEOUT), 1.0d, 60.0d, 1.0d, "s"))
+                .add(new SliderOptionRow(0, 0, 0, 22, Option.ofDouble("search_suggestion_count", GeneralConfig.SEARCH_SUGGESTION_COUNT), 1.0d, 30.0d, 1.0d, ""));
 
         OptionGroup rendering = new OptionGroup("rendering")
                 .add(new BooleanOptionRow(0, 0, 0, 22, Option.ofBoolean("disable_player_render", ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER)))
