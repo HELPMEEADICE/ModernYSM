@@ -1,16 +1,15 @@
 package com.elfmcys.yesstevemodel.client.compat.touhoulittlemaid;
 
 import com.elfmcys.yesstevemodel.client.animation.molang.TLMBinding;
+import com.elfmcys.yesstevemodel.client.entity.LivingAnimatable;
 import com.elfmcys.yesstevemodel.client.model.ModelResourceBundle;
 import com.elfmcys.yesstevemodel.client.model.PlayerModelBundle;
-import com.elfmcys.yesstevemodel.client.entity.LivingAnimatable;
+import com.elfmcys.yesstevemodel.geckolib3.core.enums.PlayState;
 import com.elfmcys.yesstevemodel.geckolib3.core.event.predicate.AnimationEvent;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.util.StringPool;
-import com.elfmcys.yesstevemodel.geckolib3.core.enums.PlayState;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Item;
-
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.fml.ModList;

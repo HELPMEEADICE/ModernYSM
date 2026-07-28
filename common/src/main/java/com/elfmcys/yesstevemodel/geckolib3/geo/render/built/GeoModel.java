@@ -5,6 +5,7 @@ import com.elfmcys.yesstevemodel.geckolib3.core.molang.util.StringPool;
 import com.elfmcys.yesstevemodel.geckolib3.geo.animated.AnimatedGeoModel;
 import com.elfmcys.yesstevemodel.resource.models.GeometryDescription;
 import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 import it.unimi.dsi.fastutil.ints.IntLists;
@@ -200,7 +201,8 @@ public class GeoModel {
                     verticesName,
                     nextElementByteName,
                     ensureCapacityName,
-                    modeName
+                    modeName,
+                    VertexFormat.Mode.class
             );
         } catch (Throwable ex) {
             YesSteveModel.LOGGER.error("[YSM] Failed to initialize SIMD mappings, fast vertex building will not work.", ex);
@@ -213,7 +215,8 @@ public class GeoModel {
             String verticesName,
             String nextElementByteName,
             String ensureCapacityName,
-            String modeName
+            String modeName,
+            Class<?> vertexFormatClass
     );
 
     public static native long nInitModelCache(ByteBuffer buffer);

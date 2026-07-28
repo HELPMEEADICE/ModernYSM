@@ -2,6 +2,7 @@ package com.elfmcys.yesstevemodel.geckolib3.geo;
 
 import com.elfmcys.yesstevemodel.capability.VehicleCapability;
 import com.elfmcys.yesstevemodel.client.entity.LivingAnimatable;
+import com.elfmcys.yesstevemodel.client.renderer.ModelPreviewRenderer;
 import com.elfmcys.yesstevemodel.geckolib3.core.event.predicate.AnimationEvent;
 import com.elfmcys.yesstevemodel.geckolib3.core.util.Color;
 import com.elfmcys.yesstevemodel.geckolib3.extended.LivingEntityRendererAccessor;
@@ -82,7 +83,8 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
 
     public void renderEntityWithTexture(T t, @Nullable ResourceLocation resourceLocation, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource multiBufferSource, int packedLight) {
         Direction bedOrientation;
-        if (RenderLivingBridge.firePre(t.getEntity(), this, partialTick, poseStack, multiBufferSource, packedLight)) {
+        boolean fireRenderEvents = !ModelPreviewRenderer.isPreview();
+        if (fireRenderEvents && RenderLivingBridge.firePre(t.getEntity(), this, partialTick, poseStack, multiBufferSource, packedLight)) {
             return;
         }
         AnimationEvent<?> event = t.processAnimation(partialTick);
@@ -127,7 +129,9 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             poseStack.popPose();
         }
         ((LivingEntityRendererAccessor) this).tlm$renderNameTag(entity, entityYaw, partialTick, poseStack, multiBufferSource, packedLight);
-        RenderLivingBridge.firePost(entity, this, partialTick, poseStack, multiBufferSource, packedLight);
+        if (fireRenderEvents) {
+            RenderLivingBridge.firePost(entity, this, partialTick, poseStack, multiBufferSource, packedLight);
+        }
     }
 
     public void render(T entity, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, int packedLightIn, AnimationEvent<?> event, EntityModelData data) {

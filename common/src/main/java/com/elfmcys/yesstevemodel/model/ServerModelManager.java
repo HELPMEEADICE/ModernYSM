@@ -1566,14 +1566,20 @@ public final class ServerModelManager {
     }
 
     private static boolean sendPacketReliably(Connection connection, Object obj, PendingTransfer pendingTransfer) {
+        io.netty.channel.Channel channel = ((ConnectionAccessor) connection).ysm$getChannel();
+        if (channel.eventLoop().inEventLoop()) {
+            YesSteveModel.LOGGER.error("[YSM] Refusing to wait for a packet from its Netty event loop");
+            return false;
+        }
+
         if (!pendingTransfer.hasStarted) {
             pendingTransfer.hasStarted = true;
-            pendingTransfer.pendingBytes = ((ConnectionAccessor) connection).ysm$getChannel().unsafe().outboundBuffer().totalPendingWriteBytes() + 65536;
+            pendingTransfer.pendingBytes = channel.unsafe().outboundBuffer().totalPendingWriteBytes() + 65536;
         }
 
         final AtomicInteger atomicInteger = new AtomicInteger(0);
-        while (connection.isConnected()) {
-            if (((ConnectionAccessor) connection).ysm$getChannel().unsafe().outboundBuffer().size() > pendingTransfer.pendingBytes) {
+        while (connection.isConnected() && channel.isActive()) {
+            if (channel.unsafe().outboundBuffer().totalPendingWriteBytes() > pendingTransfer.pendingBytes) {
                 if (!YSMThreadPool.awaitTermination(10)) {
                     return false;
                 }
@@ -1591,7 +1597,11 @@ public final class ServerModelManager {
                             return null;
                         }
                     });
-                    while (atomicInteger.get() == 0) {
+                    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+                    while (atomicInteger.get() == 0
+                            && connection.isConnected()
+                            && channel.isActive()
+                            && System.nanoTime() < deadline) {
                         if (!YSMThreadPool.awaitTermination(5)) {
                             return false;
                         }
@@ -1599,10 +1609,10 @@ public final class ServerModelManager {
                     if (atomicInteger.get() == 1) {
                         return true;
                     }
-                    if (!YSMThreadPool.awaitTermination(100)) {
-                        return false;
+                    if (atomicInteger.get() == 0 && connection.isConnected() && channel.isActive()) {
+                        YesSteveModel.LOGGER.warn("[YSM] Timed out waiting for a model packet to be sent");
                     }
-                    atomicInteger.set(0);
+                    return false;
                 } catch (Throwable th) {
                     th.printStackTrace();
                     return false;

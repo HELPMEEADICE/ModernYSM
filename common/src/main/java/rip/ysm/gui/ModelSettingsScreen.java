@@ -1,5 +1,6 @@
 package rip.ysm.gui;
 
+import com.elfmcys.yesstevemodel.client.entity.CustomPlayerEntity;
 import com.elfmcys.yesstevemodel.client.entity.LivingAnimatable;
 import com.elfmcys.yesstevemodel.client.gui.ModelMetadataPresenter;
 import com.elfmcys.yesstevemodel.client.gui.custom.AbstractConfig;
@@ -27,6 +28,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Quaternionf;
+import rip.ysm.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import rip.ysm.gui.components.BooleanOptionRow;
 import rip.ysm.gui.components.RadioOptionRow;
 import rip.ysm.gui.components.SliderOptionRow;
@@ -187,6 +189,8 @@ public class ModelSettingsScreen extends OptionScreen {
     private void renderPreview(GuiGraphics g, float partialTick) {
         if (this.minecraft == null || this.minecraft.player == null) return;
         if (!(animatable instanceof LivingAnimatable<?> la)) return;
+        GeoReplacedEntityRenderer<?, ?> renderer = la instanceof CustomPlayerEntity ? RendererManager.getPlayerRenderer() : TouhouLittleMaidCompat.getMaidPreviewRenderer(la);
+        if (renderer == null) return;
         double scale = this.minecraft.getWindow().getGuiScale();
         int sx = (int) (previewLeft * scale);
         int sy = (int) (this.minecraft.getWindow().getHeight() - previewBottom * scale);
@@ -195,7 +199,7 @@ public class ModelSettingsScreen extends OptionScreen {
         RenderSystem.enableScissor(sx, sy, sw, sh);
         float cx = (previewLeft + previewRight) / 2.0f + offsetX;
         float cy = previewTop + (previewBottom - previewTop) * 0.65f + offsetY;
-        renderPlayerForSettings(cx, cy, zoom, pitch, yaw, partialTick, la, RendererManager.getPlayerRenderer());
+        renderPlayerForSettings(cx, cy, zoom, pitch, yaw, partialTick, la, renderer);
         RenderSystem.disableScissor();
     }
 

@@ -47,6 +47,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.FormattedCharSequence;
 import org.apache.commons.lang3.StringUtils;
 import rip.ysm.gpu.GpuCapability;
+import rip.ysm.pinyin.PinyinMatcher;
 
 import java.util.*;
 
@@ -263,15 +264,15 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
         if (str2.startsWith(TAG_SEARCH_PREFIX)) {
             str2 = str2.substring(TAG_SEARCH_PREFIX.length());
         }
-        if (str.toLowerCase(Locale.ENGLISH).contains(str2)) {
+        if (PinyinMatcher.contains(str, str2)) {
             return false;
         }
         if (packData.getTranslations() != null) {
-            if (ModelMetadataPresenter.getLocalizedString(packData, "name", packData.getName()).toLowerCase(Locale.ENGLISH).contains(str2)) {
+            if (PinyinMatcher.contains(ModelMetadataPresenter.getLocalizedString(packData, "name", packData.getName()), str2)) {
                 return false;
             }
             String str3 = packData.getDescription();
-            return str3 == null || !ModelMetadataPresenter.getLocalizedString(packData, "description", str3).toLowerCase(Locale.ENGLISH).contains(str2);
+            return str3 == null || !PinyinMatcher.contains(ModelMetadataPresenter.getLocalizedString(packData, "description", str3), str2);
         }
         return true;
     }
@@ -294,12 +295,12 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
             }
             return true;
         }
-        if (str.toLowerCase(Locale.ENGLISH).contains(str2)) {
+        if (PinyinMatcher.contains(str, str2)) {
             return false;
         }
         Metadata metadata3 = modelAssembly.getModelData().getExtraInfo();
         if (metadata3 != null) {
-            if (ModelMetadataPresenter.getLocalizedModelString(modelAssembly, "metadata.name", metadata3.getName()).toLowerCase(Locale.ENGLISH).contains(str2) || ModelMetadataPresenter.getLocalizedModelString(modelAssembly, "metadata.tips", metadata3.getTips()).toLowerCase(Locale.ENGLISH).contains(str2)) {
+            if (PinyinMatcher.contains(ModelMetadataPresenter.getLocalizedModelString(modelAssembly, "metadata.name", metadata3.getName()), str2) || PinyinMatcher.contains(ModelMetadataPresenter.getLocalizedModelString(modelAssembly, "metadata.tips", metadata3.getTips()), str2)) {
                 return false;
             }
             return matchesAuthorSearch(modelAssembly, str2, metadata3);
@@ -323,7 +324,7 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
         int i = 0;
         Iterator<AuthorInfo> it = metadata2.getAuthors().iterator();
         while (it.hasNext()) {
-            if (ModelMetadataPresenter.getLocalizedModelString(modelAssembly, "metadata.authors.%d.name".formatted(Integer.valueOf(i)), it.next().getName()).toLowerCase(Locale.ENGLISH).contains(str)) {
+            if (PinyinMatcher.contains(ModelMetadataPresenter.getLocalizedModelString(modelAssembly, "metadata.authors.%d.name".formatted(Integer.valueOf(i)), it.next().getName()), str)) {
                 return false;
             }
             i++;
@@ -741,6 +742,10 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
         if (handleToggleKey(keyCode, scanCode, modifiers)) {
             return true;
         }
+        if (keyCode == InputConstants.KEY_F && Screen.hasControlDown()) {
+            toggleSearchFocus();
+            return true;
+        }
         if (this.searchBox.isFocused() && this.suggestions != null && this.suggestions.keyPressed(keyCode)) {
             navigateToSuggestedPack();
             resetCurrentPage();
@@ -761,6 +766,19 @@ public class PlayerModelScreen extends Screen implements IGuiWidget {
             return true;
         }
         return true;
+    }
+
+    private void toggleSearchFocus() {
+        Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0f));
+        if (this.searchBox.isFocused()) {
+            clearSearch();
+            resetCurrentPage();
+            init();
+            return;
+        }
+        setFocused(this.searchBox);
+        this.searchBox.setFocused(true);
+        this.searchBox.moveCursorToEnd();
     }
 
     private boolean handleToggleKey(int keyCode, int scanCode, int modifiers) {

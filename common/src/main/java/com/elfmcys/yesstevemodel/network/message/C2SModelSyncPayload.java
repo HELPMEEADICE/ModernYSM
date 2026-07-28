@@ -1,10 +1,12 @@
 package com.elfmcys.yesstevemodel.network.message;
 
 import com.elfmcys.yesstevemodel.model.ServerModelManager;
+import com.elfmcys.yesstevemodel.util.YSMThreadPool;
 import net.minecraft.network.FriendlyByteBuf;
 import rip.ysm.api.network.PacketContext;
 
 import java.nio.ByteBuffer;
+import java.util.UUID;
 
 public class C2SModelSyncPayload {
 
@@ -26,7 +28,8 @@ public class C2SModelSyncPayload {
 
     public static void handle(C2SModelSyncPayload message, PacketContext ctx) {
         if (ctx.isServerSide() && ctx.getSender() != null) {
-            ServerModelManager.nativeSendModelData(ctx.getSender().getUUID(), message.data);
+            UUID playerId = ctx.getSender().getUUID();
+            YSMThreadPool.submitSync(() -> ServerModelManager.nativeSendModelData(playerId, message.data));
         }
     }
 }

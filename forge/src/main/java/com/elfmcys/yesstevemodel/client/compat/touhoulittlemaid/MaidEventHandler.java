@@ -15,7 +15,6 @@ import com.github.tartaricacid.touhoulittlemaid.item.ItemHakureiGohei;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Item;
-
 import net.minecraftforge.common.MinecraftForge;
 
 
@@ -78,6 +77,10 @@ public class MaidEventHandler {
     }
 
     public static MaidEntityRenderer getMaidRenderer() {
+        return maidRenderer;
+    }
+
+    public static Object getMaidRendererRaw() {
         return maidRenderer;
     }
 }

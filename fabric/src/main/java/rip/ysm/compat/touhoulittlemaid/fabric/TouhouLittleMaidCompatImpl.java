@@ -2,11 +2,12 @@ package rip.ysm.compat.touhoulittlemaid.fabric;
 
 import com.elfmcys.yesstevemodel.client.animation.molang.TLMBinding;
 import com.elfmcys.yesstevemodel.client.entity.LivingAnimatable;
-import com.elfmcys.yesstevemodel.client.model.PlayerModelBundle;
-import com.elfmcys.yesstevemodel.geckolib3.core.event.predicate.AnimationEvent;
-import com.elfmcys.yesstevemodel.geckolib3.core.enums.PlayState;
-import com.elfmcys.yesstevemodel.geckolib3.core.molang.util.StringPool;
 import com.elfmcys.yesstevemodel.client.model.ModelResourceBundle;
+import com.elfmcys.yesstevemodel.client.model.PlayerModelBundle;
+import com.elfmcys.yesstevemodel.geckolib3.core.enums.PlayState;
+import com.elfmcys.yesstevemodel.geckolib3.core.event.predicate.AnimationEvent;
+import com.elfmcys.yesstevemodel.geckolib3.core.molang.util.StringPool;
+import com.elfmcys.yesstevemodel.geckolib3.geo.GeoReplacedEntityRenderer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Item;
@@ -79,6 +80,10 @@ public final class TouhouLittleMaidCompatImpl {
     }
 
     public static Object buildControllers(PlayerModelBundle modelBundle, ModelResourceBundle resourceBundle) {
+        return null;
+    }
+
+    public static GeoReplacedEntityRenderer<?, ?> getMaidPreviewRenderer(LivingAnimatable<?> animatable) {
         return null;
     }
 }

@@ -17,6 +17,7 @@ import net.minecraft.util.Mth;
 import org.apache.commons.lang3.StringUtils;
 import rip.ysm.gpu.BlurStack;
 import rip.ysm.gpu.GpuCapability;
+import rip.ysm.pinyin.PinyinMatcher;
 
 import java.util.*;
 
@@ -160,10 +161,7 @@ public class SearchSuggestions {
     }
 
     private static int indexOf(String value, String query) {
-        if (query.isEmpty()) {
-            return 0;
-        }
-        return value.toLowerCase(Locale.ENGLISH).indexOf(query);
+        return PinyinMatcher.indexOf(value, query);
     }
 
     private static int maxVisible() {

@@ -2,24 +2,24 @@ package com.elfmcys.yesstevemodel.geckolib3.core.controller;
 
 import com.elfmcys.yesstevemodel.audio.PlaybackFlags;
 import com.elfmcys.yesstevemodel.client.animation.IAnimationPredicate;
-import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.ConstantPoint;
-import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.TransitionPoint;
 import com.elfmcys.yesstevemodel.geckolib3.core.AnimatableEntity;
 import com.elfmcys.yesstevemodel.geckolib3.core.builder.ILoopType;
+import com.elfmcys.yesstevemodel.geckolib3.core.enums.AnimationState;
+import com.elfmcys.yesstevemodel.geckolib3.core.enums.PlayState;
 import com.elfmcys.yesstevemodel.geckolib3.core.event.predicate.AnimationEvent;
 import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.AnimationPoint;
 import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.BoneAnimationQueue;
+import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.ConstantPoint;
+import com.elfmcys.yesstevemodel.geckolib3.core.keyframe.TransitionPoint;
+import com.elfmcys.yesstevemodel.geckolib3.core.molang.context.AnimationContext;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.value.IValue;
-import com.elfmcys.yesstevemodel.geckolib3.core.enums.AnimationState;
-import com.elfmcys.yesstevemodel.geckolib3.core.enums.PlayState;
 import com.elfmcys.yesstevemodel.geckolib3.core.snapshot.BoneTopLevelSnapshot;
 import com.elfmcys.yesstevemodel.geckolib3.core.util.EulerNlerpScratch;
 import com.elfmcys.yesstevemodel.geckolib3.core.util.MathUtil;
+import com.elfmcys.yesstevemodel.geckolib3.core.util.TransitionVector3f;
 import com.elfmcys.yesstevemodel.geckolib3.util.IInterpolable;
 import com.elfmcys.yesstevemodel.geckolib3.util.TicksInterpolator;
-import com.elfmcys.yesstevemodel.geckolib3.core.molang.context.AnimationContext;
 import com.elfmcys.yesstevemodel.molang.runtime.ExpressionEvaluator;
-import com.elfmcys.yesstevemodel.geckolib3.core.util.TransitionVector3f;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMap;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
@@ -75,7 +75,7 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
         } else if (playState == PlayState.STOP) {
             AnimationState state = this.transitionInterpolator.getAnimationState();
             if (state == AnimationState.BEGINNING_TRANSITION || state == AnimationState.RUNNING) {
-                this.transitionInterpolator.beginEndingTransition(event.currentTick);
+                this.transitionInterpolator.beginEndingTransition(event.currentTick, evaluator);
                 this.transitionInterpolator.resetRequestedAnimation();
             }
             if (state == AnimationState.ENDING_TRANSITION) {
@@ -187,8 +187,8 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
         this.transitionInterpolator.resetRequestedAnimation();
     }
 
-    public void beginEndTransition(float currentTick) {
-        this.transitionInterpolator.beginEndingTransition(currentTick);
+    public void beginEndTransition(float currentTick, ExpressionEvaluator<AnimationContext<?>> evaluator) {
+        this.transitionInterpolator.beginEndingTransition(currentTick, evaluator);
     }
 
     public boolean isPlaying() {

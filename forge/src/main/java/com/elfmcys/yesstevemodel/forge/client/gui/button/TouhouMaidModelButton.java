@@ -1,8 +1,8 @@
 package com.elfmcys.yesstevemodel.forge.client.gui.button;
-import com.elfmcys.yesstevemodel.client.gui.button.ModelButton;
 
 import com.elfmcys.yesstevemodel.client.compat.touhoulittlemaid.capability.MaidCapabilityProvider;
 import com.elfmcys.yesstevemodel.client.entity.PlayerPreviewEntity;
+import com.elfmcys.yesstevemodel.client.gui.button.ModelButton;
 import com.elfmcys.yesstevemodel.client.model.ModelAssembly;
 import com.elfmcys.yesstevemodel.util.ComponentUtil;
 import com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
@@ -15,7 +15,11 @@ public class TouhouMaidModelButton extends ModelButton {
     private final EntityMaid maid;
 
     public TouhouMaidModelButton(int x, int y, boolean isAuthLocked, PlayerPreviewEntity previewEntity, ModelAssembly modelAssembly, EntityMaid entityMaid) {
-        super(x, y, isAuthLocked, previewEntity, modelAssembly);
+        this(x, y, isAuthLocked, previewEntity, modelAssembly, entityMaid, previewEntity.getModelId());
+    }
+
+    public TouhouMaidModelButton(int x, int y, boolean isAuthLocked, PlayerPreviewEntity previewEntity, ModelAssembly modelAssembly, EntityMaid entityMaid, String targetModelId) {
+        super(x, y, isAuthLocked, previewEntity, modelAssembly, targetModelId);
         this.maid = entityMaid;
     }
 

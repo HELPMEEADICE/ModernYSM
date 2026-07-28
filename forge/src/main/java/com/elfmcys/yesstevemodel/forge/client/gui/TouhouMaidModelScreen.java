@@ -1,17 +1,17 @@
 package com.elfmcys.yesstevemodel.forge.client.gui;
-import com.elfmcys.yesstevemodel.client.gui.PlayerModelScreen;
-import com.elfmcys.yesstevemodel.client.gui.PlayerTextureScreen;
-import com.elfmcys.yesstevemodel.client.gui.ModelMetadataPresenter;
-import com.elfmcys.yesstevemodel.client.gui.ModelInfoScreen;
 
 import com.elfmcys.yesstevemodel.client.ClientModelManager;
 import com.elfmcys.yesstevemodel.client.compat.touhoulittlemaid.capability.MaidCapabilityProvider;
-import com.elfmcys.yesstevemodel.resource.models.Metadata;
-import com.elfmcys.yesstevemodel.client.gui.button.ModelButton;
-import com.elfmcys.yesstevemodel.forge.client.gui.button.TouhouMaidModelButton;
 import com.elfmcys.yesstevemodel.client.entity.PlayerPreviewEntity;
+import com.elfmcys.yesstevemodel.client.gui.ModelInfoScreen;
+import com.elfmcys.yesstevemodel.client.gui.ModelMetadataPresenter;
+import com.elfmcys.yesstevemodel.client.gui.PlayerModelScreen;
+import com.elfmcys.yesstevemodel.client.gui.PlayerTextureScreen;
+import com.elfmcys.yesstevemodel.client.gui.button.ModelButton;
 import com.elfmcys.yesstevemodel.client.model.ModelAssembly;
+import com.elfmcys.yesstevemodel.forge.client.gui.button.TouhouMaidModelButton;
 import com.elfmcys.yesstevemodel.geckolib3.core.molang.util.StringPool;
+import com.elfmcys.yesstevemodel.resource.models.Metadata;
 import com.elfmcys.yesstevemodel.util.FileTypeUtil;
 import com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -34,8 +34,8 @@ public class TouhouMaidModelScreen extends PlayerModelScreen {
     }
 
     @Override
-    public ModelButton createModelButton(int x, int y, boolean isAuthLocked, PlayerPreviewEntity previewEntity, ModelAssembly modelAssembly) {
-        return new TouhouMaidModelButton(x, y, isAuthLocked, previewEntity, modelAssembly, this.maid);
+    public ModelButton createModelButton(int x, int y, boolean isAuthLocked, PlayerPreviewEntity previewEntity, ModelAssembly modelAssembly, String targetModelId) {
+        return new TouhouMaidModelButton(x, y, isAuthLocked, previewEntity, modelAssembly, this.maid, targetModelId);
     }
 
     @Override
